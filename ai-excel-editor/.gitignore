@@ -1,0 +1,19 @@
+# Development
+node_modules/
+.DS_Store
+.idea/
+.vscode/
+
+# Build
+*.map
+*.log
+
+# WordPress
+wp-config.php
+wp-content/uploads/
+wp-content/upgrade/
+wp-content/backup-db/
+wp-content/cache/
+
+# Environment
+.env

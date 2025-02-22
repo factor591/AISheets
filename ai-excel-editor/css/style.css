@@ -1,0 +1,271 @@
+/* AI Excel Editor Styles */
+.ai-excel-editor-container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #333;
+}
+
+/* Upload Section */
+.upload-section {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+
+/* Dropzone Styles */
+.dropzone {
+    border: 2px dashed #ddd;
+    border-radius: 8px;
+    padding: 3rem 2rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    background: #f8fafc;
+    margin-bottom: 2rem;
+}
+
+.dropzone:hover {
+    border-color: #4a90e2;
+    background: rgba(74, 144, 226, 0.03);
+}
+
+.dropzone.dragover {
+    border-color: #4a90e2;
+    background: rgba(74, 144, 226, 0.05);
+}
+
+.dropzone h3 {
+    margin: 0 0 1rem 0;
+    color: #2c3e50;
+    font-size: 1.5rem;
+}
+
+.dropzone p {
+    margin: 0.5rem 0;
+    color: #64748b;
+}
+
+.file-input {
+    display: none;
+}
+
+/* Instructions Area */
+.instructions-area {
+    margin: 2rem auto;
+    max-width: 800px;
+    width: 100%;
+}
+
+.instructions-area textarea {
+    width: 100%;
+    min-height: 120px;
+    padding: 1rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    resize: vertical;
+    font-family: inherit;
+    font-size: 1rem;
+    line-height: 1.5;
+    display: block;
+    margin: 0 auto;
+    box-sizing: border-box;
+    transition: border-color 0.3s ease;
+}
+
+.instructions-area textarea:focus {
+    outline: none;
+    border-color: #4a90e2;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+}
+
+/* Buttons */
+.action-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.button {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+    font-weight: 500;
+    min-width: 150px;
+    text-align: center;
+    position: relative;
+}
+
+.button:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.4);
+}
+
+.button:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.button-primary {
+    background: #4a90e2;
+    color: white;
+}
+
+.button-primary:hover:not(:disabled) {
+    background: #357abd;
+}
+
+.button-neutral {
+    background: #e9ecef;
+    color: #495057;
+}
+
+.button-neutral:hover:not(:disabled) {
+    background: #dee2e6;
+}
+
+/* Messages */
+.messages {
+    margin-bottom: 1rem;
+}
+
+.message {
+    padding: 1rem;
+    border-radius: 4px;
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.message-error {
+    background: #fff5f5;
+    color: #dc3545;
+    border: 1px solid #ffdee3;
+}
+
+.message-success {
+    background: #f0fff4;
+    color: #28a745;
+    border: 1px solid #c6f6d5;
+}
+
+.message-info {
+    background: #ebf8ff;
+    color: #3182ce;
+    border: 1px solid #bee3f8;
+}
+
+/* Preview Section */
+.preview-section {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+}
+
+.preview-section h3 {
+    margin-top: 0;
+    color: #2c3e50;
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+}
+
+.file-info {
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+}
+
+.file-info p {
+    margin: 0.5rem 0;
+    color: #4a5568;
+}
+
+.file-info strong {
+    color: #2d3748;
+}
+
+/* Loading State */
+.loading {
+    position: relative;
+    pointer-events: none;
+}
+
+.loading:after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1.5rem;
+    height: 1.5rem;
+    margin: -0.75rem 0 0 -0.75rem;
+    border: 2px solid #fff;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .ai-excel-editor-container {
+        margin: 1rem auto;
+        padding: 0 0.5rem;
+    }
+
+    .upload-section,
+    .preview-section {
+        padding: 1rem;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .button {
+        width: 100%;
+        margin: 0.5rem 0;
+    }
+
+    .dropzone {
+        padding: 2rem 1rem;
+    }
+
+    .dropzone h3 {
+        font-size: 1.25rem;
+    }
+}
+
+/* Accessibility Improvements */
+@media (prefers-reduced-motion: reduce) {
+    .button,
+    .dropzone,
+    .instructions-area textarea {
+        transition: none;
+    }
+
+    .loading:after {
+        animation: none;
+    }
+}
+
+/* Focus Styles for Keyboard Navigation */
+.button:focus-visible,
+.dropzone:focus-visible,
+.instructions-area textarea:focus-visible {
+    outline: 2px solid #4a90e2;
+    outline-offset: 2px;
+}
