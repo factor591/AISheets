@@ -45,6 +45,21 @@ class AI_Excel_Editor {
             wp_schedule_event(time(), 'hourly', 'ai_excel_editor_cleanup');
         }
         add_action('ai_excel_editor_cleanup', array($this, 'cleanup_old_files'));
+        
+        // Debug actions
+        add_action('wp_footer', array($this, 'debug_info'));
+    }
+    
+    // Debug function - can be removed in production
+    public function debug_info() {
+        global $post;
+        if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'ai_excel_editor')) {
+            echo '<script>
+                console.log("AISheets Debug Info:");
+                console.log("Plugin URL:", "' . AI_EXCEL_EDITOR_PLUGIN_URL . '");
+                console.log("jQuery Loaded:", typeof jQuery !== "undefined");
+            </script>';
+        }
     }
 
     public function init() {
@@ -70,6 +85,14 @@ class AI_Excel_Editor {
                 file_put_contents($processing_dir . '/.htaccess', 'deny from all');
                 file_put_contents($processing_dir . '/index.php', '<?php // Silence is golden');
             }
+            
+            // Log upload directories for debugging
+            error_log('AISheets upload directory: ' . $this->upload_dir);
+            error_log('AISheets processing directory: ' . $processing_dir);
+            // Check directory permissions
+            error_log('Upload directory permissions: ' . substr(sprintf('%o', fileperms($this->upload_dir)), -4));
+            error_log('Processing directory permissions: ' . substr(sprintf('%o', fileperms($processing_dir)), -4));
+            
         } catch (Exception $e) {
             error_log('AI Excel Editor Init Error: ' . $e->getMessage());
         }
@@ -102,14 +125,14 @@ class AI_Excel_Editor {
         if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'ai_excel_editor')) {
             wp_enqueue_style(
                 'ai-excel-editor',
-                AI_EXCEL_EDITOR_PLUGIN_URL . 'assets/css/style.css',
+                AI_EXCEL_EDITOR_PLUGIN_URL . 'css/style.css',
                 array(),
                 AI_EXCEL_EDITOR_VERSION
             );
 
             wp_enqueue_script(
                 'ai-excel-editor',
-                AI_EXCEL_EDITOR_PLUGIN_URL . 'assets/js/main.js',
+                AI_EXCEL_EDITOR_PLUGIN_URL . 'js/main.js',
                 array('jquery'),
                 AI_EXCEL_EDITOR_VERSION,
                 true
@@ -121,6 +144,9 @@ class AI_Excel_Editor {
                 'max_file_size' => $this->max_file_size,
                 'allowed_types' => $this->allowed_file_types
             ));
+            
+            // Log script loading
+            error_log('AISheets scripts enqueued for post ID: ' . $post->ID);
         }
     }
 
@@ -153,6 +179,16 @@ class AI_Excel_Editor {
                         rows="4"
                     ></textarea>
                 </div>
+                
+                <!-- Example instructions to help users -->
+                <div class="instructions-helper">
+                    <h4><?php _e('Example Instructions:', 'ai-excel-editor'); ?></h4>
+                    <div class="example-instructions">
+                        <button type="button" class="instruction-example"><?php _e('Calculate the sum of column B and add it to the bottom', 'ai-excel-editor'); ?></button>
+                        <button type="button" class="instruction-example"><?php _e('Sort the data by the "Revenue" column from highest to lowest', 'ai-excel-editor'); ?></button>
+                        <button type="button" class="instruction-example"><?php _e('Format all numbers in column C as currency with $ symbol', 'ai-excel-editor'); ?></button>
+                    </div>
+                </div>
 
                 <div class="action-buttons">
                     <button type="button" id="process-btn" class="button button-primary">
@@ -177,6 +213,7 @@ class AI_Excel_Editor {
         try {
             // Check nonce
             if (!check_ajax_referer('ai_excel_editor_nonce', 'nonce', false)) {
+                error_log('AISheets: Nonce verification failed');
                 wp_send_json_error(array(
                     'message' => 'Security check failed',
                     'code' => 'nonce_failure',
@@ -184,6 +221,9 @@ class AI_Excel_Editor {
                 ));
             }
 
+            // Log the request data for debugging
+            error_log('AISheets AJAX request received');
+            
             // Check user permissions
             if (!current_user_can('upload_files')) {
                 wp_send_json_error(array(
@@ -195,6 +235,7 @@ class AI_Excel_Editor {
 
             // Check for file
             if (!isset($_FILES['file'])) {
+                error_log('AISheets: No file uploaded');
                 wp_send_json_error(array(
                     'message' => 'No file uploaded',
                     'code' => 'no_file',
@@ -205,6 +246,15 @@ class AI_Excel_Editor {
             $file = $_FILES['file'];
             $instructions = sanitize_textarea_field($_POST['instructions']);
 
+            // Log uploaded file details
+            error_log(sprintf(
+                'AISheets file upload: Name=%s, Size=%d, Type=%s, Error=%d',
+                $file['name'],
+                $file['size'],
+                $file['type'],
+                $file['error']
+            ));
+
             // Validate file with detailed errors
             $validation_result = $this->validate_file($file);
             if (is_wp_error($validation_result)) {
@@ -214,14 +264,6 @@ class AI_Excel_Editor {
                     'details' => $validation_result->get_all_error_data()
                 ));
             }
-
-            // Log processing attempt
-            error_log(sprintf(
-                'Processing Excel file: %s, Size: %s, Type: %s',
-                $file['name'],
-                size_format($file['size']),
-                $file['type']
-            ));
 
             // Create processing directory with error checking
             $processing_dir = $this->upload_dir . '/processing';
@@ -360,31 +402,72 @@ class AI_Excel_Editor {
             throw new Exception('OpenAI API key not configured');
         }
     
-        // Log processing start with more details
         error_log(sprintf(
-            'OpenAI Processing Details: File: %s, Size: %s, Instructions: %s, API Key Present: %s',
+            'OpenAI Processing Details: File: %s, Size: %s, Instructions: %s',
             basename($file_path),
             size_format(filesize($file_path)),
-            $instructions,
-            !empty($this->openai_api_key) ? 'Yes' : 'No'
+            $instructions
         ));
     
         try {
-            // Log file read attempt
-            error_log('Attempting to read Excel file: ' . $file_path);
+            // Check if vendor directory exists and PhpSpreadsheet is properly installed
+            $vendor_path = AI_EXCEL_EDITOR_PLUGIN_DIR . 'vendor/autoload.php';
+            if (!file_exists($vendor_path)) {
+                error_log('Vendor autoload.php not found at: ' . $vendor_path);
+                throw new Exception('Required dependency files not found. Please ensure PhpSpreadsheet is installed.');
+            }
+    
+            // Include required libraries
+            require_once $vendor_path;
+            require_once AI_EXCEL_EDITOR_PLUGIN_DIR . 'includes/class-spreadsheet.php';
+            require_once AI_EXCEL_EDITOR_PLUGIN_DIR . 'includes/class-openai.php';
+    
+            // Simple test to verify PhpSpreadsheet is working
+            try {
+                $test_spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                error_log('PhpSpreadsheet initialized successfully');
+            } catch (Exception $e) {
+                error_log('PhpSpreadsheet initialization failed: ' . $e->getMessage());
+                throw new Exception('PhpSpreadsheet initialization failed: ' . $e->getMessage());
+            }
+    
+            // PHASE 1: IMPLEMENTATION - Use a feature flag to control rollout
+            $use_openai = false; // Set to false for initial testing, true for full implementation
             
-            // TODO: Implement actual OpenAI processing
-            // For now, let's log what we would do
-            error_log('Would process file with following steps:');
-            error_log('1. Read Excel file content');
-            error_log('2. Convert to format for OpenAI');
-            error_log('3. Send to OpenAI API');
-            error_log('4. Process response');
-            error_log('5. Write back to Excel');
+            if (!$use_openai) {
+                // TEMPORARY: For initial testing, return the original file
+                error_log('Using temporary pass-through (returning original file)');
+                return $file_path;
+            }
             
-            // For now, just return the original file
-            error_log('Currently returning original file without modifications');
-            return $file_path;
+            // PHASE 2: FULL IMPLEMENTATION - This code runs when $use_openai is true
+            
+            // Initialize spreadsheet handler
+            $spreadsheet_handler = new AISheets_Spreadsheet();
+            error_log('Spreadsheet handler initialized');
+            
+            // Read spreadsheet data
+            $spreadsheet_data = $spreadsheet_handler->read_file($file_path);
+            error_log('Spreadsheet data extracted successfully');
+            
+            // Initialize OpenAI handler
+            $openai_handler = new AISheets_OpenAI($this->openai_api_key);
+            error_log('OpenAI handler initialized');
+            
+            // Process with OpenAI
+            $changes = $openai_handler->process_spreadsheet($spreadsheet_data, $instructions);
+            error_log('OpenAI processing completed with changes: ' . json_encode(array_keys($changes)));
+            
+            // Generate output filename
+            $output_dir = dirname($file_path);
+            $output_filename = 'modified_' . uniqid() . '_' . basename($file_path);
+            $output_path = $output_dir . '/' . $output_filename;
+            
+            // Apply changes and save file
+            $processed_file = $spreadsheet_handler->apply_changes($file_path, $changes, $output_path);
+            
+            error_log('OpenAI processing completed successfully: ' . $processed_file);
+            return $processed_file;
         } catch (Exception $e) {
             error_log('OpenAI Processing Error: ' . $e->getMessage());
             error_log('Error Stack Trace: ' . $e->getTraceAsString());

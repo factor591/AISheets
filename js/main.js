@@ -1,4 +1,8 @@
 jQuery(document).ready(function($) {
+    // Debug initialization
+    console.log('AISheets initialized');
+    console.log('Config:', aiExcelEditor);
+    
     // Cache DOM elements
     const dropZone = $('#excel-dropzone');
     const fileInput = $('#file-upload');
@@ -39,13 +43,23 @@ jQuery(document).ready(function($) {
     });
 
     fileInput.on('change', function(e) {
+        console.log('File input changed:', this.files);
         handleFiles(this.files);
     });
 
     // Handle file selection with validation
     function handleFiles(files) {
+        console.log('handleFiles called with:', files);
         if (files.length > 0) {
             const file = files[0];
+            console.log('File selected:', file);
+            
+            // Check if we have the config available
+            if (!aiExcelEditor || !aiExcelEditor.max_file_size) {
+                console.error('AISheets config missing. Check if wp_localize_script is working properly.');
+                showMessage('Configuration error. Please contact the administrator.', 'error');
+                return;
+            }
             
             // Validate file size
             if (file.size > aiExcelEditor.max_file_size) {
@@ -74,6 +88,7 @@ jQuery(document).ready(function($) {
 
     // Process button click
     processBtn.on('click', function() {
+        console.log('Process button clicked');
         const file = fileInput[0].files[0];
         const instructionsText = instructions.val().trim();
 
@@ -96,6 +111,8 @@ jQuery(document).ready(function($) {
     });
 
     function processFile(file, instructions) {
+        console.log('Processing file:', file.name);
+        
         const formData = new FormData();
         formData.append('action', 'process_excel');
         formData.append('file', file);
@@ -105,6 +122,15 @@ jQuery(document).ready(function($) {
         processBtn.prop('disabled', true).addClass('loading');
         showMessage('Processing your file...', 'info');
 
+        // Add a progress indicator for long operations
+        let processTime = 0;
+        const progressTimer = setInterval(() => {
+            processTime += 1;
+            if (processTime % 3 === 0) {
+                showMessage(`Processing your file... (${processTime}s)`, 'info');
+            }
+        }, 1000);
+
         $.ajax({
             url: aiExcelEditor.ajax_url,
             type: 'POST',
@@ -112,6 +138,9 @@ jQuery(document).ready(function($) {
             processData: false,
             contentType: false,
             success: function(response) {
+                clearInterval(progressTimer);
+                console.log('AJAX response:', response);
+                
                 try {
                     if (response.success) {
                         // Handle success
@@ -154,6 +183,7 @@ jQuery(document).ready(function($) {
                 }
             },
             error: function(xhr, status, error) {
+                clearInterval(progressTimer);
                 let errorMessage = 'Server error occurred.\n';
                 try {
                     const response = JSON.parse(xhr.responseText);
@@ -202,6 +232,7 @@ jQuery(document).ready(function($) {
     }
 
     function showMessage(message, type = 'info') {
+        console.log('Showing message:', type, message);
         const messageDiv = $('<div>')
             .addClass(`message message-${type}`);
         
@@ -260,6 +291,12 @@ jQuery(document).ready(function($) {
             rect.right <= (window.innerWidth || document.documentElement.clientWidth)
         );
     }
+
+    // Add example instruction functionality if present
+    $('.instruction-example').on('click', function() {
+        const exampleText = $(this).text();
+        instructions.val(exampleText);
+    });
 
     // Initial setup
     processBtn.prop('disabled', true);
