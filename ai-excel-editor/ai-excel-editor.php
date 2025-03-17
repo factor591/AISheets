@@ -370,21 +370,61 @@ class AI_Excel_Editor {
         ));
     
         try {
-            // Log file read attempt
-            error_log('Attempting to read Excel file: ' . $file_path);
-            
-            // TODO: Implement actual OpenAI processing
-            // For now, let's log what we would do
-            error_log('Would process file with following steps:');
-            error_log('1. Read Excel file content');
-            error_log('2. Convert to format for OpenAI');
-            error_log('3. Send to OpenAI API');
-            error_log('4. Process response');
-            error_log('5. Write back to Excel');
-            
-            // For now, just return the original file
-            error_log('Currently returning original file without modifications');
+            // Check if vendor directory exists and PhpSpreadsheet is properly installed
+            $vendor_path = AI_EXCEL_EDITOR_PLUGIN_DIR . 'vendor/autoload.php';
+            if (!file_exists($vendor_path)) {
+                error_log('Vendor autoload.php not found at: ' . $vendor_path);
+                throw new Exception('Required dependency files not found. Please ensure PhpSpreadsheet is installed.');
+            }
+    
+            // Include required libraries
+            require_once $vendor_path;
+            require_once AI_EXCEL_EDITOR_PLUGIN_DIR . 'includes/class-spreadsheet.php';
+            require_once AI_EXCEL_EDITOR_PLUGIN_DIR . 'includes/class-openai.php';
+    
+            // Simple test to verify PhpSpreadsheet is working
+            try {
+                $test_spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+                error_log('PhpSpreadsheet initialized successfully');
+            } catch (Exception $e) {
+                error_log('PhpSpreadsheet initialization failed: ' . $e->getMessage());
+                throw new Exception('PhpSpreadsheet initialization failed: ' . $e->getMessage());
+            }
+    
+            // For initial deployment, return the original file to ensure basic functionality works
+            // IMPORTANT: Uncomment this line during initial testing to ensure basic file upload/download works
             return $file_path;
+    
+            /* 
+             * The code below this point will be executed once you comment out the return statement above
+             */
+            
+            // Initialize spreadsheet handler
+            $spreadsheet_handler = new AISheets_Spreadsheet();
+            error_log('Spreadsheet handler initialized');
+            
+            // Read spreadsheet data
+            $spreadsheet_data = $spreadsheet_handler->read_file($file_path);
+            error_log('Spreadsheet data extracted successfully');
+            
+            // Initialize OpenAI handler
+            $openai_handler = new AISheets_OpenAI($this->openai_api_key);
+            error_log('OpenAI handler initialized');
+            
+            // Process with OpenAI
+            $changes = $openai_handler->process_spreadsheet($spreadsheet_data, $instructions);
+            error_log('OpenAI processing completed with changes: ' . json_encode(array_keys($changes)));
+            
+            // Generate output filename
+            $output_dir = dirname($file_path);
+            $output_filename = 'modified_' . uniqid() . '_' . basename($file_path);
+            $output_path = $output_dir . '/' . $output_filename;
+            
+            // Apply changes and save file
+            $processed_file = $spreadsheet_handler->apply_changes($file_path, $changes, $output_path);
+            
+            error_log('OpenAI processing completed successfully: ' . $processed_file);
+            return $processed_file;
         } catch (Exception $e) {
             error_log('OpenAI Processing Error: ' . $e->getMessage());
             error_log('Error Stack Trace: ' . $e->getTraceAsString());
