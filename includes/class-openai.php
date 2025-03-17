@@ -28,6 +28,10 @@ class AISheets_OpenAI {
             // Prepare sample data to avoid token limits
             $sample_data = $this->prepare_sample_data($spreadsheet_data);
             
+            // Log the user instructions and data preparation
+            error_log('Processing spreadsheet with instructions: ' . $instructions);
+            error_log('Sample data prepared with ' . count($sample_data['worksheets']) . ' worksheets');
+            
             // Prepare request data
             $request_data = [
                 'model' => $this->model,
@@ -47,11 +51,22 @@ class AISheets_OpenAI {
                 'function_call' => ['name' => 'apply_spreadsheet_changes']
             ];
             
+            // Log API request (without sensitive data)
+            error_log('Sending request to OpenAI API using model: ' . $this->model);
+            
             // Send API request
             $response = $this->send_api_request($request_data);
             
             // Process response
-            return $this->parse_response($response);
+            $result = $this->parse_response($response);
+            
+            // Log successful API response
+            error_log('Successfully received and parsed OpenAI response');
+            
+            // Convert the response format to match what AISheets_Spreadsheet expects
+            $formatted_changes = $this->format_changes_for_spreadsheet($result);
+            
+            return $formatted_changes;
             
         } catch (Exception $e) {
             error_log('OpenAI processing error: ' . $e->getMessage());
@@ -69,16 +84,19 @@ class AISheets_OpenAI {
         $sample = ['worksheets' => []];
         
         foreach ($spreadsheet_data['worksheets'] as $sheet_name => $sheet_data) {
+            // Check if we have 'rows' or 'data' in the sheet data (handle both formats)
+            $rows_key = isset($sheet_data['rows']) ? 'rows' : 'data';
+            
             // Take just the first 10 rows to avoid token limits
-            $sample_rows = array_slice($sheet_data['rows'], 0, 10);
+            $sample_rows = array_slice($sheet_data[$rows_key], 0, 10);
             
             $sample['worksheets'][$sheet_name] = [
                 'headers' => $sheet_data['headers'],
                 'rows' => $sample_rows,
-                'rowCount' => $sheet_data['rowCount'],
-                'columnCount' => $sheet_data['columnCount'],
-                'is_sample' => count($sheet_data['rows']) > 10,
-                'total_rows' => count($sheet_data['rows'])
+                'total_rows' => isset($sheet_data['total_rows']) ? $sheet_data['total_rows'] : count($sheet_data[$rows_key]),
+                'total_columns' => isset($sheet_data['total_columns']) ? $sheet_data['total_columns'] : count($sheet_data['headers']),
+                'is_sample' => count($sheet_data[$rows_key]) > 10,
+                'full_row_count' => count($sheet_data[$rows_key])
             ];
         }
         
@@ -196,7 +214,7 @@ EOT;
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($request_data));
         curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 60); // 60-second timeout
+        curl_setopt($ch, CURLOPT_TIMEOUT, 120); // Increased timeout to 120 seconds for larger spreadsheets
         
         $response = curl_exec($ch);
         $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -210,10 +228,21 @@ EOT;
         curl_close($ch);
         
         if ($http_code !== 200) {
-            throw new Exception('API request failed with status code ' . $http_code . ': ' . $response);
+            $error_details = json_decode($response, true);
+            $error_message = isset($error_details['error']['message']) 
+                ? $error_details['error']['message'] 
+                : 'API request failed with status code ' . $http_code;
+            
+            throw new Exception($error_message);
         }
         
-        return json_decode($response, true);
+        $decoded_response = json_decode($response, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new Exception('Failed to parse API response: ' . json_last_error_msg());
+        }
+        
+        return $decoded_response;
     }
     
     /**
@@ -245,6 +274,127 @@ EOT;
             throw new Exception('Missing or invalid changes in response');
         }
         
+        // Store explanation for user feedback
+        if (isset($arguments['explanation'])) {
+            update_option('ai_excel_editor_last_explanation', $arguments['explanation']);
+        }
+        
         return $arguments;
+    }
+    
+    /**
+     * Format changes to match what the spreadsheet handler expects
+     * 
+     * @param array $result OpenAI response result
+     * @return array Formatted changes
+     */
+    private function format_changes_for_spreadsheet($result) {
+        $formatted_changes = [];
+        
+        // Group changes by worksheet
+        foreach ($result['changes'] as $change) {
+            $worksheet_name = $change['worksheet'];
+            
+            if (!isset($formatted_changes[$worksheet_name])) {
+                $formatted_changes[$worksheet_name] = [
+                    'cell_changes' => [],
+                    'column_changes' => [],
+                    'row_changes' => [],
+                    'format_changes' => [],
+                    'sort_changes' => null
+                ];
+            }
+            
+            // Process change based on type
+            switch ($change['change_type']) {
+                case 'formula':
+                case 'value':
+                    if ($change['target']['type'] === 'cell') {
+                        $cell_ref = $change['target']['reference'];
+                        $value = isset($change['value']) ? $change['value'] : '';
+                        
+                        if (strpos($value, '=') === 0) {
+                            $formatted_changes[$worksheet_name]['cell_changes'][$cell_ref] = ['formula' => $value];
+                        } else {
+                            $formatted_changes[$worksheet_name]['cell_changes'][$cell_ref] = ['value' => $value];
+                        }
+                    }
+                    break;
+                    
+                case 'add_column':
+                    if ($change['target']['type'] === 'column') {
+                        $column_ref = $change['target']['reference'];
+                        $header = isset($change['parameters']['header']) ? $change['parameters']['header'] : '';
+                        $values = isset($change['parameters']['values']) ? $change['parameters']['values'] : [];
+                        $formula = isset($change['value']) && strpos($change['value'], '=') === 0 ? $change['value'] : null;
+                        
+                        $formatted_changes[$worksheet_name]['column_changes'][$column_ref] = [
+                            'operation' => 'add',
+                            'header' => $header,
+                            'values' => $values
+                        ];
+                        
+                        if ($formula) {
+                            $formatted_changes[$worksheet_name]['column_changes'][$column_ref]['formula'] = $formula;
+                        }
+                    }
+                    break;
+                    
+                case 'delete_column':
+                    if ($change['target']['type'] === 'column') {
+                        $column_ref = $change['target']['reference'];
+                        $formatted_changes[$worksheet_name]['column_changes'][$column_ref] = [
+                            'operation' => 'delete'
+                        ];
+                    }
+                    break;
+                    
+                case 'add_row':
+                    if ($change['target']['type'] === 'row') {
+                        $row_ref = $change['target']['reference'];
+                        $values = isset($change['parameters']['values']) ? $change['parameters']['values'] : [];
+                        
+                        $formatted_changes[$worksheet_name]['row_changes'][$row_ref] = [
+                            'operation' => 'add',
+                            'values' => $values
+                        ];
+                    }
+                    break;
+                    
+                case 'delete_row':
+                    if ($change['target']['type'] === 'row') {
+                        $row_ref = $change['target']['reference'];
+                        $formatted_changes[$worksheet_name]['row_changes'][$row_ref] = [
+                            'operation' => 'delete'
+                        ];
+                    }
+                    break;
+                    
+                case 'format':
+                    if (in_array($change['target']['type'], ['cell', 'range'])) {
+                        $range_ref = $change['target']['reference'];
+                        $format_params = isset($change['parameters']) ? $change['parameters'] : [];
+                        
+                        $formatted_changes[$worksheet_name]['format_changes'][$range_ref] = $format_params;
+                    }
+                    break;
+                    
+                case 'sort':
+                    if ($change['target']['type'] === 'range') {
+                        $range = $change['target']['reference'];
+                        $column = isset($change['parameters']['column']) ? $change['parameters']['column'] : null;
+                        $direction = isset($change['parameters']['direction']) ? $change['parameters']['direction'] : 'ASC';
+                        
+                        $formatted_changes[$worksheet_name]['sort_changes'] = [
+                            'range' => $range,
+                            'column' => $column,
+                            'direction' => $direction
+                        ];
+                    }
+                    break;
+            }
+        }
+        
+        return $formatted_changes;
     }
 }

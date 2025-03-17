@@ -431,17 +431,6 @@ class AI_Excel_Editor {
                 throw new Exception('PhpSpreadsheet initialization failed: ' . $e->getMessage());
             }
     
-            // PHASE 1: IMPLEMENTATION - Use a feature flag to control rollout
-            $use_openai = false; // Set to false for initial testing, true for full implementation
-            
-            if (!$use_openai) {
-                // TEMPORARY: For initial testing, return the original file
-                error_log('Using temporary pass-through (returning original file)');
-                return $file_path;
-            }
-            
-            // PHASE 2: FULL IMPLEMENTATION - This code runs when $use_openai is true
-            
             // Initialize spreadsheet handler
             $spreadsheet_handler = new AISheets_Spreadsheet();
             error_log('Spreadsheet handler initialized');
