@@ -1,7 +1,16 @@
-# Deny direct access
-<IfModule mod_rewrite.c>
-RewriteEngine On
-RewriteRule ^.*$ - [F,L]
-</IfModule>
+# Deny direct access to PHP files
+<FilesMatch "\.php$">
+    <IfModule mod_rewrite.c>
+        RewriteEngine On
+        RewriteRule ^.*$ - [F,L]
+    </IfModule>
+</FilesMatch>
+
+# Allow access to JS and CSS files
+<FilesMatch "\.(js|css|svg|png|jpg|jpeg|gif|ico)$">
+    Order Allow,Deny
+    Allow from all
+</FilesMatch>
+
 # Protect directory
 Options -Indexes
