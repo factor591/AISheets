@@ -263,18 +263,48 @@
                   try {
                       if (response.success) {
                           const downloadUrl = response.data.file_url;
+                          const directDownloadUrl = response.data.direct_download_url;
+                          
+                          // Create download link and trigger download
                           const link = document.createElement('a');
                           link.href = downloadUrl;
                           link.download = 'processed_' + file.name;
+                          link.setAttribute('type', 'application/octet-stream');
                           document.body.appendChild(link);
-                          link.click();
+                          
+                          // Try to trigger download
+                          try {
+                              link.click();
+                          } catch (err) {
+                              console.error('AISheets: Auto-download failed:', err);
+                              // The download button in the preview will serve as backup
+                          }
+                          
                           document.body.removeChild(link);
                           
-                          showMessage('File processed and downloaded successfully!', 'success');
+                          // Show success message with preview
+                          showMessage('File processed successfully! If download doesn\'t start automatically, use the download button below.', 'success');
                           
+                          // Update preview with download button
                           if (response.data.preview) {
                               preview.html(response.data.preview);
                           }
+                          
+                          // Add event tracking for download success/failure
+                          setTimeout(function() {
+                              // Check if the download might have failed
+                              $('.download-note').css('color', '#e67e22')
+                                              .html('⚠️ If your download didn\'t start, please click the download button above.');
+                              
+                              // Try the direct download approach as fallback
+                              if (directDownloadUrl) {
+                                  console.log('AISheets: Setting up fallback download via iframe');
+                                  $('<iframe>', {
+                                      src: directDownloadUrl,
+                                      style: 'display: none;'
+                                  }).appendTo('body');
+                              }
+                          }, 3000);
                       } else {
                           let errorMessage = 'Processing error';
                           if (response.data && response.data.message) {
@@ -604,18 +634,47 @@
               if (data.success) {
                   // Create download link
                   const downloadUrl = data.data.file_url;
+                  const directDownloadUrl = data.data.direct_download_url;
+                  
+                  // Try to download the file
                   const link = document.createElement('a');
                   link.href = downloadUrl;
                   link.download = 'processed_' + file.name;
+                  link.setAttribute('type', 'application/octet-stream');
                   document.body.appendChild(link);
-                  link.click();
+                  
+                  try {
+                      link.click();
+                  } catch (err) {
+                      console.error('AISheets: Auto-download failed (vanilla):', err);
+                  }
+                  
                   document.body.removeChild(link);
                   
-                  showMessageVanilla('File processed and downloaded successfully!', 'success');
+                  showMessageVanilla('File processed successfully! If download doesn\'t start automatically, use the download button below.', 'success');
                   
                   if (data.data.preview && preview) {
                       preview.innerHTML = data.data.preview;
                   }
+                  
+                  // Add fallback download after delay
+                  setTimeout(function() {
+                      // Check if the download might have failed
+                      const downloadNote = document.querySelector('.download-note');
+                      if (downloadNote) {
+                          downloadNote.style.color = '#e67e22';
+                          downloadNote.innerHTML = '⚠️ If your download didn\'t start, please click the download button above.';
+                      }
+                      
+                      // Try the direct download approach as fallback
+                      if (directDownloadUrl) {
+                          console.log('AISheets: Setting up fallback download via iframe (vanilla)');
+                          const iframe = document.createElement('iframe');
+                          iframe.style.display = 'none';
+                          iframe.src = directDownloadUrl;
+                          document.body.appendChild(iframe);
+                      }
+                  }, 3000);
               } else {
                   let errorMessage = 'Processing error';
                   if (data.data && data.data.message) {

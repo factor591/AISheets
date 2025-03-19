@@ -72,6 +72,10 @@ class AI_Excel_Editor {
         add_action('wp_ajax_process_excel', array($this, 'handle_excel_processing'));
         add_action('wp_ajax_nopriv_process_excel', array($this, 'handle_unauthorized'));
 
+        // Direct download handler
+        add_action('wp_ajax_download_excel', array($this, 'handle_direct_download'));
+        add_action('wp_ajax_nopriv_download_excel', array($this, 'handle_direct_download'));
+
         // Debug AJAX handlers
         add_action('wp_ajax_aisheets_test', array($this, 'handle_test_ajax'));
         add_action('wp_ajax_nopriv_aisheets_test', array($this, 'handle_unauthorized'));
@@ -93,6 +97,73 @@ class AI_Excel_Editor {
             'allowed_types' => $this->allowed_file_types,
             'max_file_size' => $this->max_file_size
         ));
+    }
+    
+    /**
+     * Handle direct file downloads
+     */
+    public function handle_direct_download() {
+        aisheets_debug('Direct download handler called');
+        
+        // Check for file parameter
+        if (!isset($_GET['file']) || empty($_GET['file'])) {
+            wp_die('No file specified');
+        }
+        
+        // Sanitize filename to prevent path traversal
+        $filename = sanitize_file_name($_GET['file']);
+        
+        // Build file path
+        $upload_dir = wp_upload_dir();
+        $file_path = $upload_dir['basedir'] . '/ai-excel-editor/processing/' . $filename;
+        
+        aisheets_debug('Direct download requested for: ' . $file_path);
+        
+        // Check if file exists
+        if (!file_exists($file_path)) {
+            wp_die('File not found');
+        }
+        
+        // Check file mime type
+        $file_info = wp_check_filetype($file_path);
+        $mime_type = $file_info['type'];
+        
+        if (!$mime_type) {
+            // Default mime types for common spreadsheet formats
+            $ext = pathinfo($file_path, PATHINFO_EXTENSION);
+            switch ($ext) {
+                case 'xlsx':
+                    $mime_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                    break;
+                case 'xls':
+                    $mime_type = 'application/vnd.ms-excel';
+                    break;
+                case 'csv':
+                    $mime_type = 'text/csv';
+                    break;
+                default:
+                    $mime_type = 'application/octet-stream';
+            }
+        }
+        
+        // Prepare for download
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+        
+        // Set headers for download
+        header('Content-Description: File Transfer');
+        header('Content-Type: ' . $mime_type);
+        header('Content-Disposition: attachment; filename="' . basename($file_path) . '"');
+        header('Content-Transfer-Encoding: binary');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+        header('Pragma: public');
+        header('Content-Length: ' . filesize($file_path));
+        
+        // Output file and exit
+        readfile($file_path);
+        exit;
     }
     
     // Test AJAX handler
@@ -219,7 +290,24 @@ class AI_Excel_Editor {
                 // Set permissions explicitly
                 chmod($this->upload_dir, 0755);
                 
-                file_put_contents($this->upload_dir . '/.htaccess', 'deny from all');
+                // Create .htaccess to allow downloads
+                file_put_contents($this->upload_dir . '/.htaccess', 
+                    "# Allow all files in this directory to be downloaded\n" .
+                    "<IfModule mod_authz_core.c>\n" .
+                    "    Require all granted\n" .
+                    "</IfModule>\n" .
+                    "<IfModule !mod_authz_core.c>\n" .
+                    "    Order allow,deny\n" .
+                    "    Allow from all\n" .
+                    "</IfModule>\n\n" .
+                    "# Set proper content types\n" .
+                    "<IfModule mod_mime.c>\n" .
+                    "    AddType application/vnd.openxmlformats-officedocument.spreadsheetml.sheet .xlsx\n" .
+                    "    AddType application/vnd.ms-excel .xls\n" .
+                    "    AddType text/csv .csv\n" .
+                    "</IfModule>"
+                );
+                
                 file_put_contents($this->upload_dir . '/index.php', '<?php // Silence is golden');
                 
                 aisheets_debug('Upload directory created with permissions', substr(sprintf('%o', fileperms($this->upload_dir)), -4));
@@ -245,7 +333,24 @@ class AI_Excel_Editor {
                 // Set permissions explicitly
                 chmod($processing_dir, 0755);
                 
-                file_put_contents($processing_dir . '/.htaccess', 'deny from all');
+                // Create .htaccess to allow downloads
+                file_put_contents($processing_dir . '/.htaccess', 
+                    "# Allow all files in this directory to be downloaded\n" .
+                    "<IfModule mod_authz_core.c>\n" .
+                    "    Require all granted\n" .
+                    "</IfModule>\n" .
+                    "<IfModule !mod_authz_core.c>\n" .
+                    "    Order allow,deny\n" .
+                    "    Allow from all\n" .
+                    "</IfModule>\n\n" .
+                    "# Set proper content types\n" .
+                    "<IfModule mod_mime.c>\n" .
+                    "    AddType application/vnd.openxmlformats-officedocument.spreadsheetml.sheet .xlsx\n" .
+                    "    AddType application/vnd.ms-excel .xls\n" .
+                    "    AddType text/csv .csv\n" .
+                    "</IfModule>"
+                );
+                
                 file_put_contents($processing_dir . '/index.php', '<?php // Silence is golden');
                 
                 aisheets_debug('Processing directory created with permissions', substr(sprintf('%o', fileperms($processing_dir)), -4));
@@ -320,7 +425,8 @@ class AI_Excel_Editor {
                 'ajax_url' => admin_url('admin-ajax.php'),
                 'nonce' => $nonce,
                 'max_file_size' => $this->max_file_size,
-                'allowed_types' => $this->allowed_file_types
+                'allowed_types' => $this->allowed_file_types,
+                'download_url' => admin_url('admin-ajax.php?action=download_excel')
             ));
             
             aisheets_debug('Scripts and styles enqueued', array(
@@ -431,6 +537,46 @@ class AI_Excel_Editor {
         aisheets_debug('Request method', $_SERVER['REQUEST_METHOD']);
         
         try {
+            // Direct download handling
+            if (isset($_REQUEST['direct_download']) && $_REQUEST['direct_download'] === 'true' && isset($_REQUEST['file'])) {
+                $filename = sanitize_file_name($_REQUEST['file']);
+                $file_path = $this->upload_dir . '/processing/' . $filename;
+                
+                if (file_exists($file_path)) {
+                    aisheets_debug('Direct download request for: ' . $file_path);
+                    
+                    // Determine mime type
+                    $file_info = wp_check_filetype($file_path);
+                    $mime_type = $file_info['type'] ?: 'application/octet-stream';
+                    
+                    // Clear any output buffers
+                    if (ob_get_level()) {
+                        ob_end_clean();
+                    }
+                    
+                    // Set headers
+                    header('Content-Description: File Transfer');
+                    header('Content-Type: ' . $mime_type);
+                    header('Content-Disposition: attachment; filename="' . basename($file_path) . '"');
+                    header('Content-Transfer-Encoding: binary');
+                    header('Expires: 0');
+                    header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+                    header('Pragma: public');
+                    header('Content-Length: ' . filesize($file_path));
+                    
+                    // Output file and exit
+                    readfile($file_path);
+                    exit;
+                } else {
+                    aisheets_debug('File not found for direct download: ' . $file_path);
+                    wp_send_json_error([
+                        'message' => 'File not found for download',
+                        'code' => 'file_not_found'
+                    ]);
+                    return;
+                }
+            }
+            
             // Check nonce with detailed logging
             $nonce = isset($_REQUEST['nonce']) ? $_REQUEST['nonce'] : '';
             aisheets_debug('Checking nonce: ' . $nonce);
@@ -530,6 +676,24 @@ class AI_Excel_Editor {
                 
                 // Set permissions
                 chmod($processing_dir, 0755);
+                
+                // Create .htaccess to allow downloads
+                file_put_contents($processing_dir . '/.htaccess', 
+                    "# Allow all files in this directory to be downloaded\n" .
+                    "<IfModule mod_authz_core.c>\n" .
+                    "    Require all granted\n" .
+                    "</IfModule>\n" .
+                    "<IfModule !mod_authz_core.c>\n" .
+                    "    Order allow,deny\n" .
+                    "    Allow from all\n" .
+                    "</IfModule>\n\n" .
+                    "# Set proper content types\n" .
+                    "<IfModule mod_mime.c>\n" .
+                    "    AddType application/vnd.openxmlformats-officedocument.spreadsheetml.sheet .xlsx\n" .
+                    "    AddType application/vnd.ms-excel .xls\n" .
+                    "    AddType text/csv .csv\n" .
+                    "</IfModule>"
+                );
             }
 
             // Generate unique filename
@@ -574,30 +738,76 @@ class AI_Excel_Editor {
                 aisheets_debug('Processing file with OpenAI');
                 $processed_file = $this->process_with_openai($upload_path, $instructions);
                 
-                // Get file URL for download
-                $upload_dir = wp_upload_dir();
-                $file_url = $upload_dir['baseurl'] . '/ai-excel-editor/processing/' . basename($processed_file);
-
-                aisheets_debug('File processed successfully', array(
-                    'original' => $file['name'],
-                    'processed' => basename($processed_file),
-                    'download_url' => $file_url
-                ));
-
-                wp_send_json_success(array(
-                    'file_url' => $file_url,
-                    'preview' => sprintf(
-                        '<div class="preview-content">
-                            <p><strong>File processed:</strong> %s</p>
-                            <p><strong>Instructions:</strong> %s</p>
-                            <p><strong>Download URL:</strong> <a href="%s" target="_blank">%s</a></p>
-                        </div>',
-                        esc_html($file['name']),
-                        esc_html($instructions),
+                // Two options for downloading:
+                // OPTION 1: Direct PHP download (more reliable but keeps the user on the page)
+                if (isset($_REQUEST['direct_download']) && $_REQUEST['direct_download'] === 'true') {
+                    // Direct PHP download
+                    aisheets_debug('Using direct PHP download method');
+                    
+                    if (file_exists($processed_file)) {
+                        // Prevent output buffering
+                        if (ob_get_level()) {
+                            ob_end_clean();
+                        }
+                        
+                        // Set headers for download
+                        header('Content-Description: File Transfer');
+                        header('Content-Type: application/octet-stream');
+                        header('Content-Disposition: attachment; filename="' . basename($processed_file) . '"');
+                        header('Content-Transfer-Encoding: binary');
+                        header('Expires: 0');
+                        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+                        header('Pragma: public');
+                        header('Content-Length: ' . filesize($processed_file));
+                        
+                        // Output file data
+                        readfile($processed_file);
+                        exit;
+                    } else {
+                        aisheets_debug('File not found for direct download: ' . $processed_file);
+                        wp_send_json_error([
+                            'message' => 'File not found for download',
+                            'code' => 'file_not_found'
+                        ]);
+                    }
+                } else {
+                    // OPTION 2: URL-based download (current method with improvements)
+                    // Get file URL for download with timestamp to bypass cache
+                    $upload_dir = wp_upload_dir();
+                    $file_url = $upload_dir['baseurl'] . '/ai-excel-editor/processing/' . basename($processed_file);
+                    $file_url = add_query_arg('t', time(), $file_url); // Add timestamp to bypass cache
+                    
+                    aisheets_debug('File processed successfully', array(
+                        'original' => $file['name'],
+                        'processed' => basename($processed_file),
+                        'download_url' => $file_url
+                    ));
+                    
+                    // Prepare HTML for direct download button as fallback
+                    $download_button = sprintf(
+                        '<p><a href="%s" class="button button-primary" download>Download File</a></p>
+                        <p><a href="%s" class="button" target="_blank">Open File</a></p>',
                         esc_url($file_url),
-                        esc_html(basename($processed_file))
-                    )
-                ));
+                        esc_url($file_url)
+                    );
+                    
+                    wp_send_json_success(array(
+                        'file_url' => $file_url,
+                        'direct_download_url' => admin_url('admin-ajax.php?action=download_excel&file=' . urlencode(basename($processed_file))),
+                        'preview' => sprintf(
+                            '<div class="preview-content">
+                                <p><strong>File processed:</strong> %s</p>
+                                <p><strong>Instructions:</strong> %s</p>
+                                <p><strong>Status:</strong> <span style="color: green;">Success</span></p>
+                                %s
+                                <p class="download-note">If automatic download doesn\'t start, please use the buttons above.</p>
+                            </div>',
+                            esc_html($file['name']),
+                            esc_html($instructions),
+                            $download_button
+                        )
+                    ));
+                }
             } catch (Exception $e) {
                 aisheets_debug('OpenAI processing failed', array(
                     'error' => $e->getMessage(),
