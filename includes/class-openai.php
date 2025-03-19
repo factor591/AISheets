@@ -29,8 +29,17 @@ class AISheets_OpenAI {
             $sample_data = $this->prepare_sample_data($spreadsheet_data);
             
             // Log the user instructions and data preparation
-            error_log('Processing spreadsheet with instructions: ' . $instructions);
-            error_log('Sample data prepared with ' . count($sample_data['worksheets']) . ' worksheets');
+            aisheets_debug('Processing spreadsheet with instructions: ' . $instructions);
+            aisheets_debug('Sample data prepared with ' . count($sample_data['worksheets']) . ' worksheets');
+            
+            // TEMPORARY IMPLEMENTATION: Return empty changes to just pass through the file
+            aisheets_debug('Using temporary pass-through solution without OpenAI API call');
+            
+            // Return empty changes array (no modifications to the file)
+            return array();
+            
+            /*
+            // UNCOMMENT BELOW FOR FULL IMPLEMENTATION
             
             // Prepare request data
             $request_data = [
@@ -52,7 +61,7 @@ class AISheets_OpenAI {
             ];
             
             // Log API request (without sensitive data)
-            error_log('Sending request to OpenAI API using model: ' . $this->model);
+            aisheets_debug('Sending request to OpenAI API using model: ' . $this->model);
             
             // Send API request
             $response = $this->send_api_request($request_data);
@@ -61,15 +70,16 @@ class AISheets_OpenAI {
             $result = $this->parse_response($response);
             
             // Log successful API response
-            error_log('Successfully received and parsed OpenAI response');
+            aisheets_debug('Successfully received and parsed OpenAI response');
             
             // Convert the response format to match what AISheets_Spreadsheet expects
             $formatted_changes = $this->format_changes_for_spreadsheet($result);
             
             return $formatted_changes;
+            */
             
         } catch (Exception $e) {
-            error_log('OpenAI processing error: ' . $e->getMessage());
+            aisheets_debug('OpenAI processing error: ' . $e->getMessage());
             throw new Exception('OpenAI processing error: ' . $e->getMessage());
         }
     }

@@ -33,6 +33,72 @@ if (!defined('ABSPATH')) {
             </tr>
         </table>
         
-        <?php submit_button(); ?>
+        <h2>Diagnostics</h2>
+        <div id="aisheets-diagnostics" style="margin-top: 20px;">
+            <button type="button" id="run-diagnostics" class="button button-secondary">Run Diagnostics</button>
+            <div id="diagnostics-results" style="margin-top: 15px; padding: 10px; background: #f8f8f8; display: none; border-left: 4px solid #007cba;"></div>
+        </div>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            $('#run-diagnostics').on('click', function() {
+                var $button = $(this);
+                var $results = $('#diagnostics-results');
+                
+                $button.prop('disabled', true).text('Running...');
+                $results.html('<p>Running diagnostics, please wait...</p>').show();
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'aisheets_debug',
+                        nonce: '<?php echo wp_create_nonce('ai_excel_editor_nonce'); ?>'
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            var html = '<h3>Diagnostics Results</h3>';
+                            
+                            // PHP Configuration
+                            html += '<h4>PHP Configuration</h4>';
+                            html += '<ul>';
+                            for (var key in response.data.php_config) {
+                                html += '<li><strong>' + key + ':</strong> ' + response.data.php_config[key] + '</li>';
+                            }
+                            html += '</ul>';
+                            
+                            // Directories
+                            html += '<h4>Directories</h4>';
+                            html += '<ul>';
+                            for (var key in response.data.directories) {
+                                var value = response.data.directories[key];
+                                html += '<li><strong>' + key + ':</strong> ' + (value === true ? '✅ Yes' : (value === false ? '❌ No' : value)) + '</li>';
+                            }
+                            html += '</ul>';
+                            
+                            // WordPress Info
+                            html += '<h4>WordPress Information</h4>';
+                            html += '<ul>';
+                            html += '<li><strong>WordPress Version:</strong> ' + response.data.wp_version + '</li>';
+                            html += '<li><strong>AJAX URL:</strong> ' + response.data.ajax_url + '</li>';
+                            html += '</ul>';
+                            
+                            $results.html(html);
+                        } else {
+                            $results.html('<p>Error running diagnostics: ' + (response.data ? response.data.message : 'Unknown error') + '</p>');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        $results.html('<p>AJAX error: ' + error + '</p>');
+                    },
+                    complete: function() {
+                        $button.prop('disabled', false).text('Run Diagnostics');
+                    }
+                });
+            });
+        });
+        </script>
+        
+        <?php submit_button('Save Settings'); ?>
     </form>
 </div>

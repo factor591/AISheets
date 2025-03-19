@@ -24,9 +24,21 @@ class AISheets_Spreadsheet {
             throw new Exception("File not found: $file_path");
         }
 
+        aisheets_debug('Reading spreadsheet file: ' . basename($file_path));
+
         try {
             // Get file extension
             $file_extension = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
+            
+            // Check if vendor directory exists and PhpSpreadsheet is properly installed
+            $vendor_path = AI_EXCEL_EDITOR_PLUGIN_DIR . 'vendor/autoload.php';
+            if (!file_exists($vendor_path)) {
+                aisheets_debug('Vendor autoload.php not found at: ' . $vendor_path);
+                throw new Exception('Required dependency files not found. Please ensure PhpSpreadsheet is installed.');
+            }
+    
+            // Include required libraries
+            require_once $vendor_path;
             
             // Load the appropriate reader
             $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($file_path);
@@ -55,9 +67,11 @@ class AISheets_Spreadsheet {
                 $data['worksheets'][$worksheet_name] = $worksheet_data;
             }
             
+            aisheets_debug('Successfully read spreadsheet with ' . count($data['worksheets']) . ' worksheets');
             return $data;
+            
         } catch (Exception $e) {
-            error_log('Error reading spreadsheet file: ' . $e->getMessage());
+            aisheets_debug('Error reading spreadsheet file: ' . $e->getMessage());
             throw new Exception('Failed to read spreadsheet file: ' . $e->getMessage());
         }
     }
@@ -133,14 +147,31 @@ class AISheets_Spreadsheet {
      * @throws Exception If changes cannot be applied
      */
     public function apply_changes($original_file_path, $changes, $output_file_path) {
+        aisheets_debug('Applying changes to spreadsheet');
+        
         try {
             // Load the original spreadsheet
             $reader = \PhpOffice\PhpSpreadsheet\IOFactory::createReaderForFile($original_file_path);
             $spreadsheet = $reader->load($original_file_path);
             
             // Apply each change
+            if (empty($changes)) {
+                // If no changes provided, just copy the file
+                aisheets_debug('No changes to apply, copying file directly');
+                
+                // In this temporary implementation, just copy the file
+                if (!copy($original_file_path, $output_file_path)) {
+                    throw new Exception('Failed to copy file for temporary implementation');
+                }
+                
+                aisheets_debug('File copied successfully as temporary implementation');
+                return $output_file_path;
+            }
+            
             foreach ($changes as $worksheet_name => $worksheet_changes) {
                 // Get the worksheet (create it if it doesn't exist)
+                aisheets_debug('Processing changes for worksheet: ' . $worksheet_name);
+                
                 $worksheet = null;
                 if ($spreadsheet->sheetNameExists($worksheet_name)) {
                     $worksheet = $spreadsheet->getSheetByName($worksheet_name);
@@ -191,9 +222,11 @@ class AISheets_Spreadsheet {
             // Save the file
             $writer->save($output_file_path);
             
+            aisheets_debug('Changes applied and file saved to: ' . $output_file_path);
             return $output_file_path;
+            
         } catch (Exception $e) {
-            error_log('Error applying changes to spreadsheet: ' . $e->getMessage());
+            aisheets_debug('Error applying changes to spreadsheet: ' . $e->getMessage());
             throw new Exception('Failed to apply changes to spreadsheet: ' . $e->getMessage());
         }
     }

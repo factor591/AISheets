@@ -60,6 +60,13 @@ class AI_Excel_Editor {
         add_action('wp_ajax_process_excel', array($this, 'handle_excel_processing'));
         add_action('wp_ajax_nopriv_process_excel', array($this, 'handle_unauthorized'));
 
+        // Debug AJAX handlers
+        add_action('wp_ajax_aisheets_test', array($this, 'handle_test_ajax'));
+        add_action('wp_ajax_nopriv_aisheets_test', array($this, 'handle_unauthorized'));
+        
+        add_action('wp_ajax_aisheets_debug', array($this, 'handle_debug_ajax'));
+        add_action('wp_ajax_nopriv_aisheets_debug', array($this, 'handle_unauthorized'));
+
         // Cleanup schedule
         if (!wp_next_scheduled('ai_excel_editor_cleanup')) {
             wp_schedule_event(time(), 'hourly', 'ai_excel_editor_cleanup');
@@ -76,7 +83,62 @@ class AI_Excel_Editor {
         ));
     }
     
-    // Debug function in footer
+    // Test AJAX handler
+    public function handle_test_ajax() {
+        aisheets_debug('Test AJAX handler called');
+        
+        // Check nonce
+        if (!check_ajax_referer('ai_excel_editor_nonce', 'nonce', false)) {
+            aisheets_debug('Test AJAX nonce verification failed');
+            wp_send_json_error('Security check failed');
+        }
+        
+        aisheets_debug('Test AJAX nonce verification passed');
+        wp_send_json_success('AJAX test successful');
+    }
+    
+    // Debug AJAX handler
+    public function handle_debug_ajax() {
+        aisheets_debug('Debug AJAX handler called');
+        
+        // Check nonce
+        if (!check_ajax_referer('ai_excel_editor_nonce', 'nonce', false)) {
+            aisheets_debug('Debug AJAX nonce verification failed');
+            wp_send_json_error('Security check failed');
+        }
+        
+        aisheets_debug('Debug AJAX nonce verification passed');
+        
+        $upload_limits = array(
+            'post_max_size' => ini_get('post_max_size'),
+            'upload_max_filesize' => ini_get('upload_max_filesize'),
+            'max_file_uploads' => ini_get('max_file_uploads'),
+            'max_input_time' => ini_get('max_input_time'),
+            'max_execution_time' => ini_get('max_execution_time'),
+            'memory_limit' => ini_get('memory_limit')
+        );
+        
+        $upload_dir = wp_upload_dir();
+        $processing_dir = $upload_dir['basedir'] . '/ai-excel-editor/processing';
+        
+        $directory_info = array(
+            'upload_dir_exists' => file_exists($upload_dir['basedir']),
+            'processing_dir_exists' => file_exists($processing_dir),
+            'upload_dir_writable' => is_writable($upload_dir['basedir']),
+            'processing_dir_writable' => is_writable($processing_dir),
+            'plugin_directory' => AI_EXCEL_EDITOR_PLUGIN_DIR,
+            'plugin_url' => AI_EXCEL_EDITOR_PLUGIN_URL
+        );
+        
+        wp_send_json_success(array(
+            'php_config' => $upload_limits,
+            'directories' => $directory_info,
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'wp_version' => get_bloginfo('version')
+        ));
+    }
+    
+    // Debug info in footer
     public function debug_info() {
         global $post;
         if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'ai_excel_editor')) {
@@ -282,7 +344,13 @@ class AI_Excel_Editor {
                 </div>
 
                 <div class="action-buttons">
-                    <button type="button" id="process-btn" class="button button-primary">
+                    <button type="button" id="test-ajax-btn" class="button button-neutral">
+                        <?php _e('Test AJAX', 'ai-excel-editor'); ?>
+                    </button>
+                    <button type="button" id="check-config-btn" class="button button-neutral">
+                        <?php _e('Check Configuration', 'ai-excel-editor'); ?>
+                    </button>
+                    <button type="button" id="process-btn" class="button button-primary" disabled>
                         <?php _e('Process & Download', 'ai-excel-editor'); ?>
                     </button>
                     <button type="button" id="reset-btn" class="button button-neutral">
@@ -296,6 +364,11 @@ class AI_Excel_Editor {
                 <div id="file-preview"></div>
             </div>
             
+            <div id="debug-output" style="margin-top: 20px; display: none; padding: 10px; background: #f5f5f5; border: 1px solid #ddd;">
+                <h3>Debug Information</h3>
+                <pre id="debug-content"></pre>
+            </div>
+            
             <?php if (current_user_can('manage_options')): ?>
             <div style="margin-top: 30px; padding: 10px; border-left: 4px solid #0073aa; background: #f8f8f8;">
                 <h4>Debug Info (Admin Only)</h4>
@@ -303,6 +376,7 @@ class AI_Excel_Editor {
                 <p><strong>Directory exists:</strong> <?php echo file_exists($this->upload_dir) ? 'Yes' : 'No'; ?></p>
                 <p><strong>Directory permissions:</strong> <?php echo file_exists($this->upload_dir) ? substr(sprintf('%o', fileperms($this->upload_dir)), -4) : 'N/A'; ?></p>
                 <p><strong>Directory writable:</strong> <?php echo file_exists($this->upload_dir) && is_writable($this->upload_dir) ? 'Yes' : 'No'; ?></p>
+                <p><strong>AJAX URL:</strong> <?php echo esc_html(admin_url('admin-ajax.php')); ?></p>
             </div>
             <?php endif; ?>
         </div>
@@ -313,19 +387,24 @@ class AI_Excel_Editor {
     }
 
     public function handle_excel_processing() {
-        aisheets_debug('AJAX process_excel handler called');
+        aisheets_debug('===== AJAX process_excel handler called =====');
         aisheets_debug('REQUEST data', $_REQUEST);
         aisheets_debug('FILES data', $_FILES);
+        aisheets_debug('Request method', $_SERVER['REQUEST_METHOD']);
         
         try {
-            // Check nonce
-            if (!check_ajax_referer('ai_excel_editor_nonce', 'nonce', false)) {
-                aisheets_debug('Nonce verification failed');
+            // Check nonce with detailed logging
+            $nonce = isset($_REQUEST['nonce']) ? $_REQUEST['nonce'] : '';
+            aisheets_debug('Checking nonce: ' . $nonce);
+            
+            if (!wp_verify_nonce($nonce, 'ai_excel_editor_nonce')) {
+                aisheets_debug('Nonce verification failed. Provided: ' . $nonce);
                 wp_send_json_error(array(
                     'message' => 'Security check failed',
                     'code' => 'nonce_failure',
                     'details' => 'The security token has expired or is invalid'
                 ));
+                return;
             }
 
             aisheets_debug('Nonce verification passed');
@@ -338,20 +417,26 @@ class AI_Excel_Editor {
                     'code' => 'insufficient_permissions',
                     'details' => 'User does not have permission to upload files'
                 ));
+                return;
             }
 
             // Check for file
-            if (!isset($_FILES['file'])) {
-                aisheets_debug('No file uploaded');
+            if (!isset($_FILES['file']) || empty($_FILES['file']['tmp_name'])) {
+                aisheets_debug('No file uploaded or file upload failed. $_FILES data:', $_FILES);
                 wp_send_json_error(array(
-                    'message' => 'No file uploaded',
+                    'message' => 'No file uploaded or upload failed',
                     'code' => 'no_file',
-                    'details' => 'The file upload data was not found in the request'
+                    'details' => [
+                        'files_data' => $_FILES,
+                        'post_max_size' => ini_get('post_max_size'),
+                        'upload_max_filesize' => ini_get('upload_max_filesize')
+                    ]
                 ));
+                return;
             }
 
             $file = $_FILES['file'];
-            $instructions = sanitize_textarea_field($_POST['instructions']);
+            $instructions = isset($_POST['instructions']) ? sanitize_textarea_field($_POST['instructions']) : '';
 
             aisheets_debug('File upload details', array(
                 'name' => $file['name'],
@@ -376,6 +461,7 @@ class AI_Excel_Editor {
                     'code' => $validation_result->get_error_code(),
                     'details' => $validation_result->get_all_error_data()
                 ));
+                return;
             }
 
             // Create processing directory with error checking
@@ -394,6 +480,7 @@ class AI_Excel_Editor {
                         'code' => 'directory_creation_failed',
                         'details' => error_get_last()
                     ));
+                    return;
                 }
                 
                 // Set permissions
@@ -429,9 +516,13 @@ class AI_Excel_Editor {
                         'target_path' => $upload_path
                     )
                 ));
+                return;
             }
 
             aisheets_debug('Successfully moved uploaded file to: ' . $upload_path);
+            
+            // Set correct permissions
+            chmod($upload_path, 0644);
 
             try {
                 // Process with OpenAI
@@ -454,9 +545,12 @@ class AI_Excel_Editor {
                         '<div class="preview-content">
                             <p><strong>File processed:</strong> %s</p>
                             <p><strong>Instructions:</strong> %s</p>
+                            <p><strong>Download URL:</strong> <a href="%s" target="_blank">%s</a></p>
                         </div>',
                         esc_html($file['name']),
-                        esc_html($instructions)
+                        esc_html($instructions),
+                        esc_url($file_url),
+                        esc_html(basename($processed_file))
                     )
                 ));
             } catch (Exception $e) {
@@ -573,112 +667,58 @@ class AI_Excel_Editor {
     }
 
     private function process_with_openai($file_path, $instructions) {
-        aisheets_debug('Starting OpenAI processing', array(
+        aisheets_debug('Starting file processing', array(
             'file' => basename($file_path),
             'instructions_length' => strlen($instructions)
         ));
         
-        // Check if OpenAI API key is configured
-        if (empty($this->openai_api_key)) {
-            aisheets_debug('OpenAI API key not configured');
-            throw new Exception('OpenAI API key not configured');
-        }
-    
-        aisheets_debug('Processing file with OpenAI', array(
-            'file' => basename($file_path),
-            'size' => filesize($file_path),
-            'instructions_length' => strlen($instructions)
-        ));
-    
         try {
-            // Check if vendor directory exists and PhpSpreadsheet is properly installed
-            $vendor_path = AI_EXCEL_EDITOR_PLUGIN_DIR . 'vendor/autoload.php';
-            if (!file_exists($vendor_path)) {
-                aisheets_debug('Vendor autoload.php not found at: ' . $vendor_path);
-                throw new Exception('Required dependency files not found. Please ensure PhpSpreadsheet is installed.');
+            // Check if OpenAI API key is configured
+            if (empty($this->openai_api_key)) {
+                aisheets_debug('OpenAI API key not configured');
+                throw new Exception('OpenAI API key not configured');
             }
-    
-            // Include required libraries
-            require_once $vendor_path;
             
-            // Check if our class files exist
-            $spreadsheet_class = AI_EXCEL_EDITOR_PLUGIN_DIR . 'includes/class-spreadsheet.php';
-            $openai_class = AI_EXCEL_EDITOR_PLUGIN_DIR . 'includes/class-openai.php';
+            aisheets_debug('Temporary pass-through solution for testing');
             
-            aisheets_debug('Checking for required class files', array(
-                'spreadsheet_exists' => file_exists($spreadsheet_class),
-                'openai_exists' => file_exists($openai_class)
+            // Generate output filename
+            $upload_dir = wp_upload_dir();
+            $processing_dir = $upload_dir['basedir'] . '/ai-excel-editor/processing';
+            
+            if (!file_exists($processing_dir)) {
+                wp_mkdir_p($processing_dir);
+            }
+            
+            $output_filename = 'processed_' . uniqid() . '_' . basename($file_path);
+            $output_path = $processing_dir . '/' . $output_filename;
+            
+            // Copy file with error checking
+            if (!@copy($file_path, $output_path)) {
+                $error = error_get_last();
+                aisheets_debug('File copy failed', array(
+                    'from' => $file_path,
+                    'to' => $output_path,
+                    'error' => $error
+                ));
+                throw new Exception('Failed to copy file: ' . $error['message']);
+            }
+            
+            aisheets_debug('File copied successfully', array(
+                'from' => $file_path,
+                'to' => $output_path
             ));
             
-            if (!file_exists($spreadsheet_class) || !file_exists($openai_class)) {
-                throw new Exception('Required class files not found. Please check your installation.');
-            }
+            // Set proper permissions
+            chmod($output_path, 0644);
             
-            require_once $spreadsheet_class;
-            require_once $openai_class;
-    
-            // Simple test to verify PhpSpreadsheet is working
-            try {
-                $test_spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-                aisheets_debug('PhpSpreadsheet initialized successfully');
-            } catch (Exception $e) {
-                aisheets_debug('PhpSpreadsheet initialization failed: ' . $e->getMessage());
-                throw new Exception('PhpSpreadsheet initialization failed: ' . $e->getMessage());
-            }
-    
-            // TEMPORARY FIX: Just return the original file while debugging
-            aisheets_debug('Using temporary pass-through solution for testing');
+            // Get URL for download
+            $file_url = $upload_dir['baseurl'] . '/ai-excel-editor/processing/' . basename($output_path);
+            aisheets_debug('File URL for download: ' . $file_url);
             
-            // Generate output filename
-            $output_dir = dirname($file_path);
-            $output_filename = 'processed_' . uniqid() . '_' . basename($file_path);
-            $output_path = $output_dir . '/' . $output_filename;
-            
-            // Just copy the file for now
-            if (copy($file_path, $output_path)) {
-                aisheets_debug('File copied successfully for temporary pass-through', array(
-                    'from' => $file_path,
-                    'to' => $output_path
-                ));
-                
-                return $output_path;
-            } else {
-                aisheets_debug('Failed to copy file for temporary pass-through', error_get_last());
-                throw new Exception('Failed to copy file: ' . print_r(error_get_last(), true));
-            }
-            
-            /* COMMENTED OUT FULL IMPLEMENTATION FOR NOW
-            // Initialize spreadsheet handler
-            $spreadsheet_handler = new AISheets_Spreadsheet();
-            aisheets_debug('Spreadsheet handler initialized');
-            
-            // Read spreadsheet data
-            $spreadsheet_data = $spreadsheet_handler->read_file($file_path);
-            aisheets_debug('Spreadsheet data extracted successfully');
-            
-            // Initialize OpenAI handler
-            $openai_handler = new AISheets_OpenAI($this->openai_api_key);
-            aisheets_debug('OpenAI handler initialized');
-            
-            // Process with OpenAI
-            $changes = $openai_handler->process_spreadsheet($spreadsheet_data, $instructions);
-            aisheets_debug('OpenAI processing completed with changes: ' . json_encode(array_keys($changes)));
-            
-            // Generate output filename
-            $output_dir = dirname($file_path);
-            $output_filename = 'modified_' . uniqid() . '_' . basename($file_path);
-            $output_path = $output_dir . '/' . $output_filename;
-            
-            // Apply changes and save file
-            $processed_file = $spreadsheet_handler->apply_changes($file_path, $changes, $output_path);
-            
-            aisheets_debug('OpenAI processing completed successfully: ' . $processed_file);
-            return $processed_file;
-            */
+            return $output_path;
             
         } catch (Exception $e) {
-            aisheets_debug('OpenAI Processing Error: ' . $e->getMessage());
-            aisheets_debug('Error Stack Trace: ' . $e->getTraceAsString());
+            aisheets_debug('Processing Error: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -743,101 +783,4 @@ register_deactivation_hook(__FILE__, function() {
     AI_Excel_Editor_Activator::deactivate();
     
     aisheets_debug('Plugin deactivation completed');
-});
-
-// Add diagnostic endpoint for admins only
-add_action('wp_ajax_aisheets_diagnostics', function() {
-    if (!current_user_can('manage_options')) {
-        wp_send_json_error('Unauthorized');
-        return;
-    }
-    
-    aisheets_debug('Running diagnostics test');
-    
-    $diagnostics = array(
-        'plugin_info' => array(
-            'version' => AI_EXCEL_EDITOR_VERSION,
-            'plugin_dir' => AI_EXCEL_EDITOR_PLUGIN_DIR,
-            'plugin_url' => AI_EXCEL_EDITOR_PLUGIN_URL
-        ),
-        'php_info' => array(
-            'version' => phpversion(),
-            'max_upload_size' => ini_get('upload_max_filesize'),
-            'post_max_size' => ini_get('post_max_size'),
-            'max_execution_time' => ini_get('max_execution_time'),
-            'memory_limit' => ini_get('memory_limit')
-        ),
-        'wordpress_info' => array(
-            'version' => get_bloginfo('version'),
-            'debug_mode' => WP_DEBUG ? 'Enabled' : 'Disabled'
-        ),
-        'directories' => array()
-    );
-    
-    // Test upload directory
-    $upload_dir = wp_upload_dir();
-    $aisheets_dir = $upload_dir['basedir'] . '/ai-excel-editor';
-    $processing_dir = $aisheets_dir . '/processing';
-    
-    $diagnostics['directories']['upload_dir'] = array(
-        'path' => $upload_dir['basedir'],
-        'exists' => file_exists($upload_dir['basedir']),
-        'writable' => is_writable($upload_dir['basedir']),
-        'permissions' => file_exists($upload_dir['basedir']) ? substr(sprintf('%o', fileperms($upload_dir['basedir'])), -4) : 'N/A'
-    );
-    
-    $diagnostics['directories']['aisheets_dir'] = array(
-        'path' => $aisheets_dir,
-        'exists' => file_exists($aisheets_dir),
-        'writable' => file_exists($aisheets_dir) && is_writable($aisheets_dir),
-        'permissions' => file_exists($aisheets_dir) ? substr(sprintf('%o', fileperms($aisheets_dir)), -4) : 'N/A'
-    );
-    
-    $diagnostics['directories']['processing_dir'] = array(
-        'path' => $processing_dir,
-        'exists' => file_exists($processing_dir),
-        'writable' => file_exists($processing_dir) && is_writable($processing_dir),
-        'permissions' => file_exists($processing_dir) ? substr(sprintf('%o', fileperms($processing_dir)), -4) : 'N/A'
-    );
-    
-    // Test file writing
-    if (file_exists($aisheets_dir) && is_writable($aisheets_dir)) {
-        $test_file = $aisheets_dir . '/test_' . uniqid() . '.txt';
-        $write_result = file_put_contents($test_file, 'Test file write for diagnostics');
-        
-        $diagnostics['file_write_test'] = array(
-            'success' => $write_result !== false,
-            'bytes_written' => $write_result,
-            'file_path' => $test_file
-        );
-        
-        if ($write_result !== false) {
-            unlink($test_file); // Clean up
-        }
-    } else {
-        $diagnostics['file_write_test'] = array(
-            'success' => false,
-            'reason' => 'Directory does not exist or is not writable'
-        );
-    }
-    
-    // Test PhpSpreadsheet
-    $vendor_path = AI_EXCEL_EDITOR_PLUGIN_DIR . 'vendor/autoload.php';
-    $diagnostics['phpspreadsheet'] = array(
-        'autoload_exists' => file_exists($vendor_path)
-    );
-    
-    if (file_exists($vendor_path)) {
-        try {
-            require_once $vendor_path;
-            $phpspreadsheet_test = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-            $diagnostics['phpspreadsheet']['initialized'] = true;
-        } catch (Exception $e) {
-            $diagnostics['phpspreadsheet']['initialized'] = false;
-            $diagnostics['phpspreadsheet']['error'] = $e->getMessage();
-        }
-    }
-    
-    aisheets_debug('Diagnostics completed', $diagnostics);
-    wp_send_json_success($diagnostics);
 });
