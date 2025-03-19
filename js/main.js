@@ -225,6 +225,7 @@
           
           if (typeof aiExcelEditor !== 'undefined' && aiExcelEditor.nonce) {
               formData.append('nonce', aiExcelEditor.nonce);
+              console.log('AISheets: Using nonce:', aiExcelEditor.nonce);
           } else {
               console.error('AISheets: No nonce available!');
           }
@@ -588,6 +589,7 @@
           
           if (window.aiExcelEditor.nonce) {
               formData.append('nonce', window.aiExcelEditor.nonce);
+              console.log('AISheets: Using nonce (vanilla):', window.aiExcelEditor.nonce);
           }
           
           // Use fetch API
