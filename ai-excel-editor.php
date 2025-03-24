@@ -53,11 +53,23 @@ class AI_Excel_Editor {
     private $upload_dir;
     private $allowed_file_types;
     private $max_file_size;
+    private $api_key_source;
 
     public function __construct() {
         aisheets_debug('Plugin initializing');
         
-        $this->openai_api_key = get_option('ai_excel_editor_openai_key');
+        // First check if API key is defined in wp-config.php
+        if (defined('AISHEETS_OPENAI_API_KEY') && !empty(AISHEETS_OPENAI_API_KEY)) {
+            $this->openai_api_key = AISHEETS_OPENAI_API_KEY;
+            $this->api_key_source = 'wp-config.php';
+            aisheets_debug('Using OpenAI API key from wp-config.php');
+        } else {
+            // Fallback to WordPress option
+            $this->openai_api_key = get_option('ai_excel_editor_openai_key');
+            $this->api_key_source = 'wp_options';
+            aisheets_debug('Using OpenAI API key from WordPress options');
+        }
+        
         $this->allowed_file_types = array('xlsx', 'xls', 'csv');
         $this->max_file_size = 5 * 1024 * 1024; // 5MB
         
@@ -94,6 +106,7 @@ class AI_Excel_Editor {
         
         aisheets_debug('Plugin initialized', array(
             'openai_key_set' => !empty($this->openai_api_key),
+            'api_key_source' => $this->api_key_source,
             'allowed_types' => $this->allowed_file_types,
             'max_file_size' => $this->max_file_size
         ));
@@ -210,7 +223,9 @@ class AI_Excel_Editor {
             'upload_dir_writable' => is_writable($upload_dir['basedir']),
             'processing_dir_writable' => is_writable($processing_dir),
             'plugin_directory' => AI_EXCEL_EDITOR_PLUGIN_DIR,
-            'plugin_url' => AI_EXCEL_EDITOR_PLUGIN_URL
+            'plugin_url' => AI_EXCEL_EDITOR_PLUGIN_URL,
+            'api_key_source' => $this->api_key_source,
+            'api_key_configured' => !empty($this->openai_api_key)
         );
         
         wp_send_json_success(array(
@@ -233,6 +248,8 @@ class AI_Excel_Editor {
                 console.log("WordPress AJAX URL:", "' . admin_url('admin-ajax.php') . '");
                 console.log("Nonce:", "' . wp_create_nonce('ai_excel_editor_nonce') . '");
                 console.log("User Logged In:", "' . (is_user_logged_in() ? 'Yes' : 'No') . '");
+                console.log("API Key Source:", "' . esc_js($this->api_key_source) . '");
+                console.log("API Key Configured:", "' . (!empty($this->openai_api_key) ? 'Yes' : 'No') . '");
                 
                 // Test DOM elements
                 document.addEventListener("DOMContentLoaded", function() {
@@ -426,7 +443,9 @@ class AI_Excel_Editor {
                 'nonce' => $nonce,
                 'max_file_size' => $this->max_file_size,
                 'allowed_types' => $this->allowed_file_types,
-                'download_url' => admin_url('admin-ajax.php?action=download_excel')
+                'download_url' => admin_url('admin-ajax.php?action=download_excel'),
+                'api_key_configured' => !empty($this->openai_api_key),
+                'api_key_source' => $this->api_key_source
             ));
             
             aisheets_debug('Scripts and styles enqueued', array(
@@ -443,7 +462,7 @@ class AI_Excel_Editor {
         
         if (!$this->openai_api_key) {
             aisheets_debug('OpenAI API key not configured');
-            return '<div class="error">Please configure the OpenAI API key in the plugin settings.</div>';
+            return '<div class="error">Please configure the OpenAI API key in the plugin settings or wp-config.php file.</div>';
         }
 
         ob_start();
@@ -521,6 +540,8 @@ class AI_Excel_Editor {
                 <p><strong>Post Max Size:</strong> <?php echo esc_html(ini_get('post_max_size')); ?></p>
                 <p><strong>User Logged In:</strong> <?php echo is_user_logged_in() ? 'Yes' : 'No'; ?></p>
                 <p><strong>User ID:</strong> <?php echo get_current_user_id(); ?></p>
+                <p><strong>API Key Source:</strong> <?php echo esc_html($this->api_key_source); ?></p>
+                <p><strong>API Key Configured:</strong> <?php echo !empty($this->openai_api_key) ? 'Yes' : 'No'; ?></p>
             </div>
             <?php endif; ?>
         </div>

@@ -7,6 +7,28 @@ if (!defined('ABSPATH')) {
 
 <div class="wrap">
     <h1><?php echo esc_html(get_admin_page_title()); ?></h1>
+    
+    <div class="notice notice-info">
+        <p>
+            <strong>Security Note:</strong> For production use, it's recommended to set your OpenAI API key in your wp-config.php file rather than storing it in the database.
+            Add this line to your wp-config.php file:
+            <code>define('AISHEETS_OPENAI_API_KEY', 'your_api_key_here');</code>
+        </p>
+    </div>
+
+    <?php
+    // Check if API key is defined in wp-config.php
+    $api_key_configured_in_wp_config = defined('AISHEETS_OPENAI_API_KEY') && !empty(AISHEETS_OPENAI_API_KEY);
+    
+    if ($api_key_configured_in_wp_config) :
+    ?>
+        <div class="notice notice-success">
+            <p>
+                <strong>API Key Status:</strong> Your OpenAI API key is configured in wp-config.php. This is the recommended and most secure method.
+                The API key field below is disabled as the wp-config.php setting takes precedence.
+            </p>
+        </div>
+    <?php endif; ?>
 
     <form method="post" action="options.php">
         <?php
@@ -18,17 +40,28 @@ if (!defined('ABSPATH')) {
             <tr valign="top">
                 <th scope="row">OpenAI API Key</th>
                 <td>
-                    <input type="text" 
-                           name="ai_excel_editor_openai_key" 
-                           value="<?php echo esc_attr(get_option('ai_excel_editor_openai_key')); ?>" 
-                           class="regular-text"
-                    />
-                    <p class="description">
-                        Enter your OpenAI API key. Get one from 
-                        <a href="https://platform.openai.com/account/api-keys" target="_blank">
-                            OpenAI's website
-                        </a>
-                    </p>
+                    <?php if ($api_key_configured_in_wp_config) : ?>
+                        <input type="text" 
+                               value="API key is configured in wp-config.php" 
+                               class="regular-text"
+                               disabled
+                        />
+                        <p class="description">
+                            The API key is currently set in wp-config.php. To change it, edit your wp-config.php file.
+                        </p>
+                    <?php else : ?>
+                        <input type="text" 
+                               name="ai_excel_editor_openai_key" 
+                               value="<?php echo esc_attr(get_option('ai_excel_editor_openai_key')); ?>" 
+                               class="regular-text"
+                        />
+                        <p class="description">
+                            Enter your OpenAI API key. Get one from 
+                            <a href="https://platform.openai.com/account/api-keys" target="_blank">
+                                OpenAI's website
+                            </a>
+                        </p>
+                    <?php endif; ?>
                 </td>
             </tr>
         </table>
@@ -58,6 +91,17 @@ if (!defined('ABSPATH')) {
                     success: function(response) {
                         if (response.success) {
                             var html = '<h3>Diagnostics Results</h3>';
+                            
+                            // Add API Key Status
+                            html += '<h4>API Key Status</h4>';
+                            html += '<ul>';
+                            html += '<li><strong>API Key Source:</strong> ' + 
+                                    (<?php echo $api_key_configured_in_wp_config ? 'true' : 'false'; ?> ? 
+                                     'wp-config.php' : 'WordPress Database') + '</li>';
+                            html += '<li><strong>API Key Configured:</strong> ' + 
+                                    (<?php echo !empty(get_option('ai_excel_editor_openai_key')) || $api_key_configured_in_wp_config ? 'true' : 'false'; ?> ? 
+                                     'Yes' : 'No') + '</li>';
+                            html += '</ul>';
                             
                             // PHP Configuration
                             html += '<h4>PHP Configuration</h4>';
@@ -99,6 +143,11 @@ if (!defined('ABSPATH')) {
         });
         </script>
         
-        <?php submit_button('Save Settings'); ?>
+        <?php 
+        // Only show submit button if API key is not configured in wp-config.php
+        if (!$api_key_configured_in_wp_config) {
+            submit_button('Save Settings');
+        }
+        ?>
     </form>
 </div>

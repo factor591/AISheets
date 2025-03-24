@@ -16,8 +16,20 @@ class AISheets_OpenAI_Integration {
     private $max_tokens = 8000;
     private $temperature = 0.2;
     
+    /**
+     * Constructor
+     * 
+     * @param string $api_key OpenAI API key
+     * @throws Exception if API key is empty
+     */
     public function __construct($api_key) {
+        if (empty($api_key)) {
+            aisheets_debug('OpenAI Integration: API key not provided');
+            throw new Exception('OpenAI API key is required but was not provided');
+        }
+        
         $this->api_key = $api_key;
+        aisheets_debug('OpenAI Integration: Successfully initialized');
     }
     
     /**
@@ -145,7 +157,7 @@ class AISheets_OpenAI_Integration {
                 $sheet_data = [
                     'headers' => $headers,
                     'rows' => $rows,
-                    'total_rows' => $highest_row - 1, // Exclude header row
+                    'total_rows' => $highest_row - 1, // Excluding header row
                     'total_columns' => $highest_column_index
                 ];
                 
@@ -289,10 +301,10 @@ class AISheets_OpenAI_Integration {
                                 'type' => 'string',
                                 'description' => 'Explanation of the changes made to the spreadsheet'
                             ]
-                        ],
+                        },
                         'required' => ['changes', 'explanation']
                     ]
-                ]
+                }
             ],
             'function_call' => ['name' => 'update_spreadsheet'],
             'temperature' => $this->temperature,
@@ -308,6 +320,10 @@ class AISheets_OpenAI_Integration {
      */
     private function call_api($request_data) {
         aisheets_debug('Calling OpenAI API');
+        
+        if (empty($this->api_key)) {
+            throw new Exception('API key is required to call the OpenAI API');
+        }
         
         $headers = [
             'Content-Type: application/json',
@@ -328,21 +344,26 @@ class AISheets_OpenAI_Integration {
             $error = curl_error($ch);
             curl_close($ch);
             aisheets_debug('API request failed: ' . $error);
-            throw new \Exception('API request failed: ' . $error);
+            throw new Exception('API request failed: ' . $error);
         }
         
         curl_close($ch);
         
         if ($http_code !== 200) {
-            aisheets_debug('API returned error ' . $http_code . ': ' . $response);
-            throw new \Exception('API returned error ' . $http_code . ': ' . $response);
+            $error_details = json_decode($response, true);
+            $error_message = isset($error_details['error']['message']) 
+                ? $error_details['error']['message']
+                : 'API returned error ' . $http_code;
+            
+            aisheets_debug('API returned error ' . $http_code . ': ' . $error_message);
+            throw new Exception($error_message);
         }
         
         $decoded_response = json_decode($response, true);
         
         if (json_last_error() !== JSON_ERROR_NONE) {
             aisheets_debug('Failed to parse API response');
-            throw new \Exception('Failed to parse API response');
+            throw new Exception('Failed to parse API response');
         }
         
         aisheets_debug('OpenAI API response received');
