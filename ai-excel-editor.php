@@ -921,6 +921,13 @@ class AI_Excel_Editor {
         }
     }
 
+    /**
+     * Process file with OpenAI
+     * 
+     * @param string $file_path Path to the uploaded file
+     * @param string $instructions User instructions
+     * @return string Path to the processed file
+     */
     private function process_with_openai($file_path, $instructions) {
         aisheets_debug('Starting file processing', array(
             'file' => basename($file_path),
@@ -934,7 +941,9 @@ class AI_Excel_Editor {
                 throw new Exception('OpenAI API key not configured');
             }
             
-            aisheets_debug('Temporary pass-through solution for testing');
+            // Load OpenAI integration class
+            require_once AI_EXCEL_EDITOR_PLUGIN_DIR . 'includes/class-openai-integration.php';
+            $openai = new AISheets_OpenAI_Integration($this->openai_api_key);
             
             // Generate output filename
             $upload_dir = wp_upload_dir();
@@ -947,21 +956,34 @@ class AI_Excel_Editor {
             $output_filename = 'processed_' . uniqid() . '_' . basename($file_path);
             $output_path = $processing_dir . '/' . $output_filename;
             
-            // Copy file with error checking
-            if (!@copy($file_path, $output_path)) {
-                $error = error_get_last();
-                aisheets_debug('File copy failed', array(
-                    'from' => $file_path,
-                    'to' => $output_path,
-                    'error' => $error
-                ));
-                throw new Exception('Failed to copy file: ' . $error['message']);
-            }
+            // Process with OpenAI
+            aisheets_debug('Calling OpenAI for processing');
             
-            aisheets_debug('File copied successfully', array(
-                'from' => $file_path,
-                'to' => $output_path
-            ));
+            try {
+                // Process spreadsheet with OpenAI
+                $openai_response = $openai->process_spreadsheet($file_path, $instructions);
+                
+                // Apply changes to spreadsheet
+                aisheets_debug('Applying changes to spreadsheet');
+                $modified = $openai->apply_changes_to_spreadsheet($file_path, $output_path, $openai_response);
+                
+                if (!$modified) {
+                    // Fallback to original file if modification failed
+                    aisheets_debug('Modification failed, falling back to original file');
+                    if (!copy($file_path, $output_path)) {
+                        throw new Exception('Failed to copy file after modification failure');
+                    }
+                }
+            } catch (Exception $api_error) {
+                // Log the API error
+                aisheets_debug('OpenAI processing error: ' . $api_error->getMessage());
+                
+                // Fallback to copying the original file
+                aisheets_debug('Using fallback (copy original file)');
+                if (!copy($file_path, $output_path)) {
+                    throw new Exception('Failed to copy file: ' . error_get_last()['message']);
+                }
+            }
             
             // Set proper permissions
             chmod($output_path, 0644);
