@@ -1,39 +1,38 @@
 <?php
 /**
- * OpenAI Integration Class
- *
- * Handles all communication with the OpenAI API
+ * OpenAI Integration for AI Excel Editor
  */
 
+// Prevent direct access
 if (!defined('ABSPATH')) {
     exit;
 }
 
 class AISheets_OpenAI_Integration {
     private $api_key;
-    private $model = 'gpt-4';
     private $api_endpoint = 'https://api.openai.com/v1/chat/completions';
-    private $max_tokens = 8000;
+    private $model = 'gpt-4';
     private $temperature = 0.2;
+    private $max_tokens = 8000;
     
     /**
      * Constructor
      * 
      * @param string $api_key OpenAI API key
-     * @throws Exception if API key is empty
      */
     public function __construct($api_key) {
-        if (empty($api_key)) {
+        $this->api_key = $api_key;
+        
+        if (empty($this->api_key)) {
             aisheets_debug('OpenAI Integration: API key not provided');
             throw new Exception('OpenAI API key is required but was not provided');
         }
         
-        $this->api_key = $api_key;
         aisheets_debug('OpenAI Integration: Successfully initialized');
     }
     
     /**
-     * Process a spreadsheet with OpenAI
+     * Process spreadsheet with OpenAI
      * 
      * @param string $file_path Path to the spreadsheet file
      * @param string $instructions User's natural language instructions
@@ -283,7 +282,7 @@ class AISheets_OpenAI_Integration {
                                                     'type' => 'string',
                                                     'description' => 'Cell reference (e.g., A1), range (e.g., A1:C10), column name/letter, or row number'
                                                 ]
-                                            }
+                                            ]
                                         ],
                                         'value' => [
                                             'type' => 'string',
@@ -301,10 +300,10 @@ class AISheets_OpenAI_Integration {
                                 'type' => 'string',
                                 'description' => 'Explanation of the changes made to the spreadsheet'
                             ]
-                        },
+                        ],
                         'required' => ['changes', 'explanation']
                     ]
-                }
+                ]
             ],
             'function_call' => ['name' => 'update_spreadsheet'],
             'temperature' => $this->temperature,
