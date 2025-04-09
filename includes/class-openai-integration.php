@@ -13,7 +13,7 @@ class AISheets_OpenAI_Integration {
     private $api_endpoint = 'https://api.openai.com/v1/chat/completions';
     private $model = 'gpt-4';
     private $temperature = 0.2;
-    private $max_tokens = 8000;
+    private $max_tokens = 4000;
     
     /**
      * Constructor
@@ -200,7 +200,7 @@ class AISheets_OpenAI_Integration {
             $total_rows = count($sheet_data['rows']);
             
             // Take at most 15 rows as a sample
-            $max_sample_rows = 15;
+            $max_sample_rows = 5;
             $sample_rows = array_slice($sheet_data['rows'], 0, $max_sample_rows);
             
             // If we have more than sample size rows, include some from the end too
