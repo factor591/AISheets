@@ -225,91 +225,102 @@ class AISheets_OpenAI_Integration {
         return $sample;
     }
     
-    /**
-     * Prepare API request for OpenAI
-     * 
-     * @param array $sample_data Spreadsheet sample data
-     * @param string $instructions User's instructions
-     * @return array OpenAI API request data
-     */
-    private function prepare_api_request($sample_data, $instructions) {
-        aisheets_debug('Preparing OpenAI API request');
-        
-        return [
-            'model' => $this->model,
-            'messages' => [
-                [
-                    'role' => 'system',
-                    'content' => $this->get_system_prompt()
-                ],
-                [
-                    'role' => 'user',
-                    'content' => "Here is the spreadsheet data:\n" . json_encode($sample_data) . "\n\nInstructions: " . $instructions
-                ]
+/**
+ * Prepare API request for OpenAI
+ * 
+ * @param array $sample_data Spreadsheet sample data
+ * @param string $instructions User's instructions
+ * @return array OpenAI API request data
+ */
+private function prepare_api_request($sample_data, $instructions) {
+    aisheets_debug('Preparing OpenAI API request');
+    
+    return [
+        'model' => $this->model,
+        'messages' => [
+            [
+                'role' => 'system',
+                'content' => $this->get_system_prompt()
             ],
-            'functions' => [
-                [
-                    'name' => 'update_spreadsheet',
-                    'description' => 'Apply changes to the spreadsheet based on the user instructions',
-                    'parameters' => [
-                        'type' => 'object',
-                        'properties' => [
-                            'changes' => [
-                                'type' => 'array',
-                                'description' => 'List of changes to apply to the spreadsheet',
-                                'items' => [
-                                    'type' => 'object',
-                                    'properties' => [
-                                        'worksheet' => [
-                                            'type' => 'string',
-                                            'description' => 'Name of the worksheet to modify'
-                                        ],
-                                        'type' => [
-                                            'type' => 'string',
-                                            'enum' => ['value', 'formula', 'format', 'sort', 'filter', 'add_column', 'add_row', 'delete_row', 'delete_column'],
-                                            'description' => 'Type of change to apply'
-                                        ],
-                                        'target' => [
-                                            'type' => 'object',
-                                            'description' => 'Target of the change',
-                                            'properties' => [
-                                                'type' => [
-                                                    'type' => 'string',
-                                                    'enum' => ['cell', 'range', 'column', 'row'],
-                                                    'description' => 'Type of target'
-                                                ],
-                                                'reference' => [
-                                                    'type' => 'string',
-                                                    'description' => 'Cell reference (e.g., A1), range (e.g., A1:C10), column name/letter, or row number'
-                                                ]
+            [
+                'role' => 'user',
+                'content' => "Here is the spreadsheet data:\n" . json_encode($sample_data) . "\n\nInstructions: " . $instructions
+            ]
+        ],
+        'functions' => [
+            [
+                'name' => 'update_spreadsheet',
+                'description' => 'Apply changes to the spreadsheet based on the user instructions',
+                'parameters' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'changes' => [
+                            'type' => 'array',
+                            'description' => 'List of changes to apply to the spreadsheet',
+                            'items' => [
+                                'type' => 'object',
+                                'properties' => [
+                                    'worksheet' => [
+                                        'type' => 'string',
+                                        'description' => 'Name of the worksheet to modify'
+                                    ],
+                                    'type' => [
+                                        'type' => 'string',
+                                        'enum' => ['value', 'formula', 'format', 'sort', 'add_column', 'add_row', 'delete_row', 'delete_column'],
+                                        'description' => 'Type of change to apply'
+                                    ],
+                                    'target' => [
+                                        'type' => 'object',
+                                        'description' => 'Target of the change',
+                                        'properties' => [
+                                            'type' => [
+                                                'type' => 'string',
+                                                'enum' => ['cell', 'range', 'column', 'row'],
+                                                'description' => 'Type of target'
+                                            ],
+                                            'reference' => [
+                                                'type' => 'string',
+                                                'description' => 'Cell reference (e.g., A1), range (e.g., A1:C10), column name/letter, or row number'
                                             ]
-                                        ],
-                                        'value' => [
-                                            'type' => 'string',
-                                            'description' => 'Value or formula to set. For formulas, start with ='
-                                        ],
-                                        'parameters' => [
-                                            'type' => 'object',
-                                            'description' => 'Additional parameters for the change'
                                         ]
                                     ],
-                                    'required' => ['worksheet', 'type', 'target']
-                                ]
-                            ],
-                            'explanation' => [
-                                'type' => 'string',
-                                'description' => 'Explanation of the changes made to the spreadsheet'
+                                    'value' => [
+                                        'type' => 'string',
+                                        'description' => 'Plain text value to set (not JSON objects)'
+                                    ],
+                                    'parameters' => [
+                                        'type' => 'object',
+                                        'description' => 'Additional parameters for the change',
+                                        'properties' => [
+                                            'values_by_column' => [
+                                                'type' => 'object',
+                                                'description' => 'For adding rows, provide individual values per column',
+                                                'properties' => [
+                                                    'Name' => ['type' => 'string'],
+                                                    'Email' => ['type' => 'string'],
+                                                    'Phone' => ['type' => 'string']
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ],
+                                'required' => ['worksheet', 'type', 'target']
                             ]
                         ],
-                        'required' => ['changes', 'explanation']
-                    ]
+                        'explanation' => [
+                            'type' => 'string',
+                            'description' => 'Explanation of the changes made to the spreadsheet'
+                        ]
+                    ],
+                    'required' => ['changes', 'explanation']
                 ]
-            ],
-            'function_call' => ['name' => 'update_spreadsheet'],
-            'temperature' => $this->temperature,
-            'max_tokens' => $this->max_tokens
-        ];
-    }
+            ]
+        ],
+        'function_call' => ['name' => 'update_spreadsheet'],
+        'temperature' => $this->temperature,
+        'max_tokens' => $this->max_tokens
+    ];
+}
     
     /**
      * Call OpenAI API
@@ -556,6 +567,26 @@ class AISheets_OpenAI_Integration {
             return;
         }
         
+        // Handle JSON-like strings by parsing them
+        if (is_string($value) && (strpos($value, '{') === 0 || strpos($value, '[') === 0)) {
+            try {
+                $decoded = json_decode($value, true);
+                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                    // If it's a valid JSON array/object, use the more appropriate values
+                    if (isset($decoded['Name']) && isset($decoded['Email']) && isset($decoded['Phone'])) {
+                        aisheets_debug('Detected JSON object with contact fields, extracting Name field');
+                        $value = $decoded['Name']; // Use Name as default or most appropriate field
+                    } else if (count($decoded) === 1 && is_string(reset($decoded))) {
+                        // If it's a single value array, use that value
+                        $value = reset($decoded);
+                    }
+                }
+            } catch (Exception $e) {
+                // If parsing fails, keep the original value
+                aisheets_debug('Failed to parse JSON-like string: ' . $e->getMessage());
+            }
+        }
+        
         switch ($target['type']) {
             case 'cell':
                 $worksheet->getCell($target['reference'])->setValue($value);
@@ -726,6 +757,24 @@ class AISheets_OpenAI_Integration {
         if (isset($parameters['values']) && is_array($parameters['values'])) {
             $row = 2; // Start from row 2 (after header)
             foreach ($parameters['values'] as $cellValue) {
+                // Handle JSON objects in values
+                if (is_string($cellValue) && strpos($cellValue, '{') === 0) {
+                    try {
+                        $decoded = json_decode($cellValue, true);
+                        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                            // If JSON parsed successfully, extract relevant value
+                            if (isset($decoded[$value])) {
+                                $cellValue = $decoded[$value]; // Use value matching column name
+                            } else {
+                                // Or pick first value if column name doesn't match
+                                $cellValue = reset($decoded);
+                            }
+                        }
+                    } catch (Exception $e) {
+                        // Keep original value if parsing fails
+                    }
+                }
+                
                 $worksheet->setCellValueByColumnAndRow($columnIndex, $row, $cellValue);
                 $row++;
             }
@@ -750,20 +799,90 @@ class AISheets_OpenAI_Integration {
         // Insert row
         $worksheet->insertNewRowBefore($rowIndex);
         
-        // Set values if provided
-        if (isset($parameters['values']) && is_array($parameters['values'])) {
+        // Handle values_by_column parameter for better structured data
+        if (isset($parameters['values_by_column']) && is_array($parameters['values_by_column'])) {
+            $headers = [];
+            $headerRow = 1;
+            $highestColumn = $worksheet->getHighestColumn();
+            $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
+            
+            // Get column headers
+            for ($col = 1; $col <= $highestColumnIndex; $col++) {
+                $headers[$col] = $worksheet->getCellByColumnAndRow($col, $headerRow)->getValue();
+            }
+            
+            // Set cell values based on column headers
+            foreach ($headers as $colIndex => $header) {
+                if (isset($parameters['values_by_column'][$header])) {
+                    $worksheet->setCellValueByColumnAndRow($colIndex, $rowIndex, $parameters['values_by_column'][$header]);
+                }
+            }
+        }
+        // Set values if provided as array
+        else if (isset($parameters['values']) && is_array($parameters['values'])) {
             $column = 1;
             foreach ($parameters['values'] as $cellValue) {
+                // Parse JSON-like strings if needed
+                if (is_string($cellValue) && strpos($cellValue, '{') === 0) {
+                    try {
+                        $decoded = json_decode($cellValue, true);
+                        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                            // If it's a contact object with common fields, extract the appropriate one
+                            if (isset($decoded['Name']) && $column === 1) {
+                                $cellValue = $decoded['Name'];
+                            } else if (isset($decoded['Email']) && $column === 2) {
+                                $cellValue = $decoded['Email'];
+                            } else if (isset($decoded['Phone']) && $column === 3) {
+                                $cellValue = $decoded['Phone'];
+                            } else {
+                                // Use first value
+                                $cellValue = reset($decoded);
+                            }
+                        }
+                    } catch (Exception $e) {
+                        // Keep original value if parsing fails
+                    }
+                }
+                
                 $worksheet->setCellValueByColumnAndRow($column, $rowIndex, $cellValue);
                 $column++;
             }
         } elseif (!empty($value)) {
-            // Set the same value in all cells of the row
-            $highestColumn = $worksheet->getHighestColumn();
-            $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
-            
-            for ($column = 1; $column <= $highestColumnIndex; $column++) {
-                $worksheet->setCellValueByColumnAndRow($column, $rowIndex, $value);
+            // If value is a JSON string, try to parse and extract meaningful values
+            if (is_string($value) && strpos($value, '{') === 0) {
+                try {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        // Get headers to match data to columns
+                        $headers = [];
+                        $headerRow = 1;
+                        $highestColumn = $worksheet->getHighestColumn();
+                        $highestColumnIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestColumn);
+                        
+                        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+                            $headers[$col] = $worksheet->getCellByColumnAndRow($col, $headerRow)->getValue();
+                        }
+                        
+                        // Map decoded values to columns
+                        foreach ($headers as $colIndex => $header) {
+                            if (isset($decoded[$header])) {
+                                $worksheet->setCellValueByColumnAndRow($colIndex, $rowIndex, $decoded[$header]);
+                            }
+                        }
+                        
+                        // If no columns were matched, just set the first cell with a meaningful value
+                        if (isset($decoded['Name'])) {
+                            $worksheet->setCellValueByColumnAndRow(1, $rowIndex, $decoded['Name']);
+                        }
+                    } else {
+                        $worksheet->setCellValueByColumnAndRow(1, $rowIndex, $value);
+                    }
+                } catch (Exception $e) {
+                    $worksheet->setCellValueByColumnAndRow(1, $rowIndex, $value);
+                }
+            } else {
+                // Set the same value in the first cell of the row
+                $worksheet->setCellValueByColumnAndRow(1, $rowIndex, $value);
             }
         }
     }
@@ -817,7 +936,20 @@ class AISheets_OpenAI_Integration {
                     $row = (int)$coordinates[1] - 1;
                     
                     if (isset($value[$row_index][$col])) {
-                        $worksheet->getCell($cell)->setValue($value[$row_index][$col]);
+                        // Parse JSON-like strings if needed
+                        $cell_value = $value[$row_index][$col];
+                        if (is_string($cell_value) && strpos($cell_value, '{') === 0) {
+                            try {
+                                $decoded = json_decode($cell_value, true);
+                                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                                    // Get the first value if it's a JSON object
+                                    $cell_value = reset($decoded);
+                                }
+                            } catch (Exception $e) {
+                                // Use original value if parsing fails
+                            }
+                        }
+                        $worksheet->getCell($cell)->setValue($cell_value);
                     }
                     
                     $row_index++;
@@ -828,7 +960,20 @@ class AISheets_OpenAI_Integration {
                 $cell_index = 0;
                 foreach ($cells as $cell) {
                     if (isset($value[$cell_index])) {
-                        $worksheet->getCell($cell)->setValue($value[$cell_index]);
+                        // Parse JSON-like strings if needed
+                        $cell_value = $value[$cell_index];
+                        if (is_string($cell_value) && strpos($cell_value, '{') === 0) {
+                            try {
+                                $decoded = json_decode($cell_value, true);
+                                if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                                    // Get the first value if it's a JSON object
+                                    $cell_value = reset($decoded);
+                                }
+                            } catch (Exception $e) {
+                                // Use original value if parsing fails
+                            }
+                        }
+                        $worksheet->getCell($cell)->setValue($cell_value);
                     }
                     $cell_index++;
                 }
@@ -836,8 +981,22 @@ class AISheets_OpenAI_Integration {
         } 
         // If value is a scalar, set it for all cells in the range
         else {
+            // Parse JSON-like strings if needed
+            $processed_value = $value;
+            if (is_string($value) && strpos($value, '{') === 0) {
+                try {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        // Get the first value if it's a JSON object
+                        $processed_value = reset($decoded);
+                    }
+                } catch (Exception $e) {
+                    // Use original value if parsing fails
+                }
+            }
+            
             foreach ($cells as $cell) {
-                $worksheet->getCell($cell)->setValue($value);
+                $worksheet->getCell($cell)->setValue($processed_value);
             }
         }
     }
@@ -852,8 +1011,8 @@ class AISheets_OpenAI_Integration {
     private function set_column_values($worksheet, $column, $value) {
         // Convert column name to index if needed
         $columnIndex = is_numeric($column) ? 
-            (int)$column : 
-            \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($column);
+        (int)$column : 
+        \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($column);
         
         $highestRow = $worksheet->getHighestRow();
         
@@ -861,15 +1020,42 @@ class AISheets_OpenAI_Integration {
             // If value is an array, set each cell to corresponding array value
             $row_index = 1;
             foreach ($value as $cell_value) {
+                // Parse JSON-like strings if needed
+                if (is_string($cell_value) && strpos($cell_value, '{') === 0) {
+                    try {
+                        $decoded = json_decode($cell_value, true);
+                        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                            // Get the first value if it's a JSON object
+                            $cell_value = reset($decoded);
+                        }
+                    } catch (Exception $e) {
+                        // Use original value if parsing fails
+                    }
+                }
+                
                 if ($row_index <= $highestRow) {
                     $worksheet->setCellValueByColumnAndRow($columnIndex, $row_index, $cell_value);
                 }
                 $row_index++;
             }
         } else {
+            // Parse JSON-like strings if needed
+            $processed_value = $value;
+            if (is_string($value) && strpos($value, '{') === 0) {
+                try {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        // Get the first value if it's a JSON object
+                        $processed_value = reset($decoded);
+                    }
+                } catch (Exception $e) {
+                    // Use original value if parsing fails
+                }
+            }
+            
             // Set the same value for all cells in the column
             for ($row = 1; $row <= $highestRow; $row++) {
-                $worksheet->setCellValueByColumnAndRow($columnIndex, $row, $value);
+                $worksheet->setCellValueByColumnAndRow($columnIndex, $row, $processed_value);
             }
         }
     }
@@ -890,12 +1076,73 @@ class AISheets_OpenAI_Integration {
             // If value is an array, set each cell to corresponding array value
             $col_index = 1;
             foreach ($value as $cell_value) {
+                // Parse JSON-like strings if needed
+                if (is_string($cell_value) && strpos($cell_value, '{') === 0) {
+                    try {
+                        $decoded = json_decode($cell_value, true);
+                        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                            // Get appropriate value based on column
+                            if ($col_index === 1 && isset($decoded['Name'])) {
+                                $cell_value = $decoded['Name'];
+                            } else if ($col_index === 2 && isset($decoded['Email'])) {
+                                $cell_value = $decoded['Email'];
+                            } else if ($col_index === 3 && isset($decoded['Phone'])) {
+                                $cell_value = $decoded['Phone'];
+                            } else {
+                                // Get the first value if it's a JSON object
+                                $cell_value = reset($decoded);
+                            }
+                        }
+                    } catch (Exception $e) {
+                        // Use original value if parsing fails
+                    }
+                }
+                
                 if ($col_index <= $highestColumnIndex) {
                     $worksheet->setCellValueByColumnAndRow($col_index, $rowIndex, $cell_value);
                 }
                 $col_index++;
             }
         } else {
+            // If value is a JSON-like string
+            if (is_string($value) && strpos($value, '{') === 0) {
+                try {
+                    $decoded = json_decode($value, true);
+                    if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                        // Try to map properties to columns
+                        $headers = [];
+                        $headerRow = 1;
+                        
+                        // Get column headers to match values
+                        for ($col = 1; $col <= $highestColumnIndex; $col++) {
+                            $headers[$col] = $worksheet->getCellByColumnAndRow($col, $headerRow)->getValue();
+                        }
+                        
+                        // Set values matching header names
+                        foreach ($headers as $colIndex => $header) {
+                            if (isset($decoded[$header])) {
+                                $worksheet->setCellValueByColumnAndRow($colIndex, $rowIndex, $decoded[$header]);
+                            }
+                        }
+                        
+                        // If we didn't have matching headers for common fields, use defaults
+                        if (isset($decoded['Name']) && !in_array('Name', $headers)) {
+                            $worksheet->setCellValueByColumnAndRow(1, $rowIndex, $decoded['Name']);
+                        }
+                        if (isset($decoded['Email']) && !in_array('Email', $headers)) {
+                            $worksheet->setCellValueByColumnAndRow(2, $rowIndex, $decoded['Email']);
+                        }
+                        if (isset($decoded['Phone']) && !in_array('Phone', $headers)) {
+                            $worksheet->setCellValueByColumnAndRow(3, $rowIndex, $decoded['Phone']);
+                        }
+                        
+                        return; // We've handled the JSON object
+                    }
+                } catch (Exception $e) {
+                    // Continue with default handling if parsing fails
+                }
+            }
+            
             // Set the same value for all cells in the row
             for ($col = 1; $col <= $highestColumnIndex; $col++) {
                 $worksheet->setCellValueByColumnAndRow($col, $rowIndex, $value);
@@ -914,10 +1161,10 @@ class AISheets_OpenAI_Integration {
         switch ($target['type']) {
             case 'cell':
                 return [$target['reference']];
-                
+            
             case 'range':
                 return \PhpOffice\PhpSpreadsheet\Cell\Coordinate::extractAllCellReferencesInRange($target['reference']);
-                
+            
             case 'column':
                 $column = $target['reference'];
                 $highestRow = $worksheet->getHighestRow();
@@ -928,7 +1175,7 @@ class AISheets_OpenAI_Integration {
                 }
                 
                 return $cells;
-                
+            
             case 'row':
                 $row = (int)$target['reference'];
                 $highestColumn = $worksheet->getHighestColumn();
@@ -940,7 +1187,7 @@ class AISheets_OpenAI_Integration {
                 }
                 
                 return $cells;
-                
+            
             default:
                 return [];
         }
@@ -954,20 +1201,33 @@ class AISheets_OpenAI_Integration {
     private function get_system_prompt() {
         return "You are a spreadsheet assistant that helps modify Excel and CSV files.
 
-1. Your task is to analyze the provided spreadsheet data and modify it according to the user's instructions.
-2. The provided spreadsheet data is often a sample of the full data to avoid token limits.
-3. Always respect the structure of the spreadsheet and column names.
-4. For Excel formulas, use Excel formula syntax starting with =.
-5. The user may provide incomplete or ambiguous instructions, so use your judgment to determine the best way to modify the spreadsheet.
-6. Return your changes using the update_spreadsheet function with a list of specific changes to apply.
+1. Always maintain proper data formatting in the spreadsheet.
+2. For adding new rows, provide individual values for each cell, not JSON objects.
+3. When asked to add people or data, return separate values for each column.
+4. DO NOT return JSON structures as values - provide plain text values only.
+5. Values should be appropriate for the column they belong in.
+6. For names, email addresses, and phone numbers, use realistic but fictional data.
 
-IMPORTANT GUIDELINES:
-- If you need to add data or modify the spreadsheet, make changes to relevant cells or ranges, not the entire spreadsheet.
-- For sorting or filtering, use the appropriate change type.
-- For calculations, create formulas that can be applied across rows or columns as appropriate.
-- Keep formulas concise and clear.
-- Provide clear explanations of your changes in the explanation field.
+For example, instead of returning:
+{\"Name\":\"John Doe\",\"Email\":\"john@example.com\",\"Phone\":\"555-123-4567\"}
 
-Note that some spreadsheets may be very large and you've only been provided a sample of the data. Make sure your changes will apply correctly to the entire dataset.";
+Return separate values:
+- Name column: John Doe
+- Email column: john@example.com
+- Phone column: 555-123-4567
+
+This will ensure proper formatting in the spreadsheet.
+
+When adding rows with structured data (like contact information):
+1. Use the 'add_row' change type
+2. Include a 'parameters' object with 'values_by_column' 
+3. Provide individual values for each column 
+4. Organize by column headers to ensure proper data placement
+
+Keep all values as plain text strings, not as serialized objects or JSON.
+
+Your task is to analyze the provided spreadsheet data and modify it according to the user's instructions.
+The provided spreadsheet data is often a sample of the full data to avoid token limits.
+Always respect the structure of the spreadsheet and column names.";
     }
 }

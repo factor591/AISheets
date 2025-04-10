@@ -1,5 +1,17 @@
 // Dual implementation with both jQuery and vanilla JS
 (function() {
+  // Debounce function to prevent rapid successive clicks
+  function debounce(func, wait) {
+    let timeout;
+    return function() {
+      const context = this, args = arguments;
+      clearTimeout(timeout);
+      timeout = setTimeout(function() {
+        func.apply(context, args);
+      }, wait);
+    };
+  }
+
   // Wait for DOM to be ready using both methods
   function initialize() {
     console.log('AISheets: Initializing...');
@@ -34,6 +46,9 @@
       const debugOutput = $('#debug-output');
       const debugContent = $('#debug-content');
       
+      // Track whether a download is in progress to prevent duplicates
+      let downloadInProgress = false;
+      
       // Log element existence
       console.log('AISheets: Elements found via jQuery:', {
         dropZone: dropZone.length > 0,
@@ -51,7 +66,7 @@
       }
       
       // Test Ajax button click
-      testAjaxBtn.on('click', function() {
+      testAjaxBtn.on('click', debounce(function() {
           console.log('AISheets: Test AJAX button clicked');
           
           $.ajax({
@@ -70,10 +85,10 @@
                   showMessage('Test AJAX failed.', 'error');
               }
           });
-      });
+      }, 300));
       
       // Check Config button click
-      checkConfigBtn.on('click', function() {
+      checkConfigBtn.on('click', debounce(function() {
           console.log('AISheets: Check configuration button clicked');
           
           $.ajax({
@@ -97,7 +112,7 @@
                   showMessage('Configuration check failed.', 'error');
               }
           });
-      });
+      }, 300));
       
       // Initialize file upload triggers
       dropZone.on('click', function(e) {
@@ -138,11 +153,11 @@
         handleFiles(this.files);
       });
       
-      // Process button click
-      processBtn.on('click', function() {
-        // NEW: Add processing flag to prevent multiple submissions
-        if ($(this).data('processing')) {
-          console.log('AISheets: Already processing, ignoring click');
+      // Process button click - apply debounce and add processing flag check
+      processBtn.on('click', debounce(function() {
+        // Check if already processing to prevent multiple submissions
+        if ($(this).data('processing') || downloadInProgress) {
+          console.log('AISheets: Already processing or download in progress, ignoring click');
           return;
         }
         
@@ -166,7 +181,7 @@
         }
         
         processFile(file, instructionsText);
-      });
+      }, 300));
       
       // Reset button click
       resetBtn.on('click', function() {
@@ -229,6 +244,9 @@
               nonce_present: !!aiExcelEditor.nonce
           });
           
+          // Set download in progress flag to prevent duplicate downloads
+          downloadInProgress = true;
+          
           // Create FormData
           const formData = new FormData();
           formData.append('action', 'process_excel');
@@ -277,7 +295,8 @@
                           const downloadUrl = response.data.file_url;
                           const directDownloadUrl = response.data.direct_download_url;
                           
-                          // Create download link and trigger download
+                          // Create download link and trigger download - but only once
+                          console.log('AISheets: Initiating download');
                           const link = document.createElement('a');
                           link.href = downloadUrl;
                           link.download = 'processed_' + file.name;
@@ -308,14 +327,21 @@
                               $('.download-note').css('color', '#e67e22')
                                               .html('⚠️ If your download didn\'t start, please click the download button above.');
                               
-                              // Try the direct download approach as fallback
-                              if (directDownloadUrl) {
+                              // Try the direct download approach as fallback - but only once and only if needed
+                              if (directDownloadUrl && downloadInProgress) {
                                   console.log('AISheets: Setting up fallback download via iframe');
-                                  $('<iframe>', {
-                                      src: directDownloadUrl,
-                                      style: 'display: none;'
-                                  }).appendTo('body');
+                                  // Create a fallback iframe for download, but only one
+                                  if ($('#download-iframe').length === 0) {
+                                      $('<iframe>', {
+                                          id: 'download-iframe',
+                                          src: directDownloadUrl,
+                                          style: 'display: none;'
+                                      }).appendTo('body');
+                                  }
                               }
+                              
+                              // Reset download flag after fallback attempt
+                              downloadInProgress = false;
                           }, 3000);
                       } else {
                           let errorMessage = 'Processing error';
@@ -324,10 +350,12 @@
                           }
                           showMessage(errorMessage, 'error');
                           console.error('AISheets: Processing Error:', response.data);
+                          downloadInProgress = false;
                       }
                   } catch (e) {
                       showMessage('Error parsing server response', 'error');
                       console.error('AISheets: Parse error:', e, response);
+                      downloadInProgress = false;
                   }
               },
               error: function(xhr, status, error) {
@@ -338,11 +366,16 @@
                       statusCode: xhr.status
                   });
                   showMessage('Server error occurred. Please try again.', 'error');
+                  downloadInProgress = false;
               },
               complete: function() {
                   processBtn.removeClass('loading').prop('disabled', false);
-                  // NEW: Reset processing flag when complete
+                  // Reset processing flag when complete
                   processBtn.data('processing', false);
+                  // Ensure the download flag gets reset even if something went wrong
+                  setTimeout(function() {
+                      downloadInProgress = false;
+                  }, 5000);
               }
           });
       }
@@ -355,6 +388,10 @@
         messagesContainer.empty();
         dropZone.removeClass('dragover');
         debugOutput.hide();
+        downloadInProgress = false;
+        processBtn.data('processing', false);
+        // Remove any lingering download iframes
+        $('#download-iframe').remove();
         showMessage('Workspace reset.', 'info');
       }
       
