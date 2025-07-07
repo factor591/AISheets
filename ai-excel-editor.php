@@ -606,20 +606,18 @@ class AI_Excel_Editor {
             $valid = wp_verify_nonce($nonce, 'ai_excel_editor_nonce');
             if (!$valid) {
                 aisheets_debug('Nonce verification failed. Provided: ' . $nonce);
-                aisheets_debug('This could be due to nonce timeout or mismatch. Continuing anyway for testing.');
-                // For testing, comment out the following error response
-                // wp_send_json_error(array(
-                //     'message' => 'Security check failed',
-                //     'code' => 'nonce_failure',
-                //     'details' => 'The security token has expired or is invalid'
-                // ));
-                // return;
+                aisheets_debug('This could be due to nonce timeout or mismatch.');
+                wp_send_json_error(array(
+                    'message' => 'Security check failed',
+                    'code' => 'nonce_failure',
+                    'details' => 'The security token has expired or is invalid'
+                ));
+                return;
             }
 
             aisheets_debug('Continuing with file processing');
             
-            // Check user permissions - TEMPORARY BYPASS FOR TESTING
-            /* 
+            // Check user permissions
             if (!current_user_can('upload_files')) {
                 aisheets_debug('User permission denied');
                 wp_send_json_error(array(
@@ -629,8 +627,6 @@ class AI_Excel_Editor {
                 ));
                 return;
             }
-            */
-            aisheets_debug('User permission check bypassed for testing');
 
             // Check for file
             if (!isset($_FILES['file']) || empty($_FILES['file']['tmp_name'])) {
