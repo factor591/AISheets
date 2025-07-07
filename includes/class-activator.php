@@ -212,12 +212,18 @@ class AI_Excel_Editor_Activator {
                 }
             }
 
-            // Create .htaccess for security
+            // Create or update .htaccess to deny direct access
             $htaccess = $dir . '/.htaccess';
-            if (!file_exists($htaccess)) {
-                file_put_contents($htaccess, 
-                    "Order Deny,Allow\nDeny from all\n");
-            }
+            file_put_contents(
+                $htaccess,
+                "<IfModule mod_authz_core.c>\n" .
+                "    Require all denied\n" .
+                "</IfModule>\n" .
+                "<IfModule !mod_authz_core.c>\n" .
+                "    Order deny,allow\n" .
+                "    Deny from all\n" .
+                "</IfModule>\n"
+            );
 
             // Create index.php for security
             $index = $dir . '/index.php';

@@ -84,9 +84,12 @@ class AI_Excel_Editor {
         add_action('wp_ajax_process_excel', array($this, 'handle_excel_processing'));
         add_action('wp_ajax_nopriv_process_excel', array($this, 'handle_unauthorized'));
 
-        // Direct download handler
+        // Direct download handler (legacy)
         add_action('wp_ajax_download_excel', array($this, 'handle_direct_download'));
         add_action('wp_ajax_nopriv_download_excel', array($this, 'handle_direct_download'));
+
+        // Authenticated download endpoint
+        add_action('wp_ajax_download_processed_file', array($this, 'handle_authenticated_download'));
 
         // Debug AJAX handlers
         add_action('wp_ajax_aisheets_test', array($this, 'handle_test_ajax'));
@@ -175,6 +178,50 @@ class AI_Excel_Editor {
         header('Content-Length: ' . filesize($file_path));
         
         // Output file and exit
+        readfile($file_path);
+        exit;
+    }
+
+    /**
+     * Authenticated download endpoint
+     */
+    public function handle_authenticated_download() {
+        aisheets_debug('Authenticated download handler called');
+
+        if (!is_user_logged_in()) {
+            wp_die('Authentication required');
+        }
+
+        if (!isset($_GET['file']) || empty($_GET['file'])) {
+            wp_die('No file specified');
+        }
+
+        $filename = sanitize_file_name($_GET['file']);
+        $upload_dir = wp_upload_dir();
+        $file_path = $upload_dir['basedir'] . '/ai-excel-editor/processing/' . $filename;
+
+        aisheets_debug('Authenticated download requested for: ' . $file_path);
+
+        if (!file_exists($file_path)) {
+            wp_die('File not found');
+        }
+
+        $file_info = wp_check_filetype($file_path);
+        $mime_type = $file_info['type'] ?: 'application/octet-stream';
+
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        header('Content-Description: File Transfer');
+        header('Content-Type: ' . $mime_type);
+        header('Content-Disposition: attachment; filename="' . basename($file_path) . '"');
+        header('Content-Transfer-Encoding: binary');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
+        header('Pragma: public');
+        header('Content-Length: ' . filesize($file_path));
+
         readfile($file_path);
         exit;
     }
@@ -307,22 +354,17 @@ class AI_Excel_Editor {
                 // Set permissions explicitly
                 chmod($this->upload_dir, 0755);
                 
-                // Create .htaccess to allow downloads
-                file_put_contents($this->upload_dir . '/.htaccess', 
-                    "# Allow all files in this directory to be downloaded\n" .
+                // Create .htaccess to deny direct access by default
+                file_put_contents(
+                    $this->upload_dir . '/.htaccess',
+                    "# Deny access to all files by default\n" .
                     "<IfModule mod_authz_core.c>\n" .
-                    "    Require all granted\n" .
+                    "    Require all denied\n" .
                     "</IfModule>\n" .
                     "<IfModule !mod_authz_core.c>\n" .
-                    "    Order allow,deny\n" .
-                    "    Allow from all\n" .
-                    "</IfModule>\n\n" .
-                    "# Set proper content types\n" .
-                    "<IfModule mod_mime.c>\n" .
-                    "    AddType application/vnd.openxmlformats-officedocument.spreadsheetml.sheet .xlsx\n" .
-                    "    AddType application/vnd.ms-excel .xls\n" .
-                    "    AddType text/csv .csv\n" .
-                    "</IfModule>"
+                    "    Order deny,allow\n" .
+                    "    Deny from all\n" .
+                    "</IfModule>\n"
                 );
                 
                 file_put_contents($this->upload_dir . '/index.php', '<?php // Silence is golden');
@@ -350,22 +392,17 @@ class AI_Excel_Editor {
                 // Set permissions explicitly
                 chmod($processing_dir, 0755);
                 
-                // Create .htaccess to allow downloads
-                file_put_contents($processing_dir . '/.htaccess', 
-                    "# Allow all files in this directory to be downloaded\n" .
+                // Create .htaccess to deny direct access by default
+                file_put_contents(
+                    $processing_dir . '/.htaccess',
+                    "# Deny access to all files by default\n" .
                     "<IfModule mod_authz_core.c>\n" .
-                    "    Require all granted\n" .
+                    "    Require all denied\n" .
                     "</IfModule>\n" .
                     "<IfModule !mod_authz_core.c>\n" .
-                    "    Order allow,deny\n" .
-                    "    Allow from all\n" .
-                    "</IfModule>\n\n" .
-                    "# Set proper content types\n" .
-                    "<IfModule mod_mime.c>\n" .
-                    "    AddType application/vnd.openxmlformats-officedocument.spreadsheetml.sheet .xlsx\n" .
-                    "    AddType application/vnd.ms-excel .xls\n" .
-                    "    AddType text/csv .csv\n" .
-                    "</IfModule>"
+                    "    Order deny,allow\n" .
+                    "    Deny from all\n" .
+                    "</IfModule>\n"
                 );
                 
                 file_put_contents($processing_dir . '/index.php', '<?php // Silence is golden');
@@ -699,21 +736,16 @@ class AI_Excel_Editor {
                 chmod($processing_dir, 0755);
                 
                 // Create .htaccess to allow downloads
-                file_put_contents($processing_dir . '/.htaccess', 
-                    "# Allow all files in this directory to be downloaded\n" .
+                file_put_contents(
+                    $processing_dir . '/.htaccess',
+                    "# Deny access to all files by default\n" .
                     "<IfModule mod_authz_core.c>\n" .
-                    "    Require all granted\n" .
+                    "    Require all denied\n" .
                     "</IfModule>\n" .
                     "<IfModule !mod_authz_core.c>\n" .
-                    "    Order allow,deny\n" .
-                    "    Allow from all\n" .
-                    "</IfModule>\n\n" .
-                    "# Set proper content types\n" .
-                    "<IfModule mod_mime.c>\n" .
-                    "    AddType application/vnd.openxmlformats-officedocument.spreadsheetml.sheet .xlsx\n" .
-                    "    AddType application/vnd.ms-excel .xls\n" .
-                    "    AddType text/csv .csv\n" .
-                    "</IfModule>"
+                    "    Order deny,allow\n" .
+                    "    Deny from all\n" .
+                    "</IfModule>\n"
                 );
             }
 
