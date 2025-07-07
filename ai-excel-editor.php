@@ -36,9 +36,6 @@ function aisheets_debug($message, $data = null) {
     }
 }
 
-// Previously, an unrestricted wp_ajax_nopriv_process_excel handler was
-// registered here for testing. It has been removed to prevent unauthenticated
-// users from processing files.
 
 class AI_Excel_Editor {
     private $openai_api_key;
