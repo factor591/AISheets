@@ -36,17 +36,9 @@ function aisheets_debug($message, $data = null) {
     }
 }
 
-// For testing only - allow non-authenticated users to process files
-add_action('wp_ajax_nopriv_process_excel', function() {
-    // Get the global plugin instance
-    global $ai_excel_editor;
-    if ($ai_excel_editor) {
-        // Call the same handler used for authenticated users
-        $ai_excel_editor->handle_excel_processing();
-    } else {
-        wp_send_json_error(['message' => 'Plugin instance not available']);
-    }
-});
+// Previously, an unrestricted wp_ajax_nopriv_process_excel handler was
+// registered here for testing. It has been removed to prevent unauthenticated
+// users from processing files.
 
 class AI_Excel_Editor {
     private $openai_api_key;
@@ -603,34 +595,24 @@ class AI_Excel_Editor {
             aisheets_debug('Checking nonce: ' . $nonce);
             
             // Use wp_verify_nonce without early return
-            $valid = wp_verify_nonce($nonce, 'ai_excel_editor_nonce');
-            if (!$valid) {
-                aisheets_debug('Nonce verification failed. Provided: ' . $nonce);
-                aisheets_debug('This could be due to nonce timeout or mismatch. Continuing anyway for testing.');
-                // For testing, comment out the following error response
-                // wp_send_json_error(array(
-                //     'message' => 'Security check failed',
-                //     'code' => 'nonce_failure',
-                //     'details' => 'The security token has expired or is invalid'
-                // ));
-                // return;
-            }
-
-            aisheets_debug('Continuing with file processing');
-            
-            // Check user permissions - TEMPORARY BYPASS FOR TESTING
-            /* 
-            if (!current_user_can('upload_files')) {
-                aisheets_debug('User permission denied');
+            if (!wp_verify_nonce($nonce, 'ai_excel_editor_nonce')) {
+                aisheets_debug('Nonce verification failed');
                 wp_send_json_error(array(
-                    'message' => 'Permission denied',
-                    'code' => 'insufficient_permissions',
-                    'details' => 'User does not have permission to upload files'
+                    'message' => 'Security check failed',
+                    'code'    => 'nonce_failure'
                 ));
                 return;
             }
-            */
-            aisheets_debug('User permission check bypassed for testing');
+
+            // Ensure the requester is logged in and allowed to upload files
+            if (!is_user_logged_in() || !current_user_can('upload_files')) {
+                aisheets_debug('User permission denied');
+                wp_send_json_error(array(
+                    'message' => 'Permission denied',
+                    'code'    => 'insufficient_permissions'
+                ));
+                return;
+            }
 
             // Check for file
             if (!isset($_FILES['file']) || empty($_FILES['file']['tmp_name'])) {
